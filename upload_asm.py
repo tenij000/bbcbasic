@@ -4,7 +4,7 @@ import serial
 import time
 import os
 
-def upload_and_save_asm(asm_file, sd_name, port='COM6', baud=115200):
+def upload_and_save_asm(asm_file, sd_name, drive=0, port='COM6', baud=115200):
     bin_file = os.path.splitext(asm_file)[0] + '.bin'
     beebasm = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'beebasm_win', 'beebasm.exe')
     
@@ -17,14 +17,19 @@ def upload_and_save_asm(asm_file, sd_name, port='COM6', baud=115200):
     data = open(bin_file, 'rb').read()
     print(f"      Geassembleerd: {bin_file} ({len(data)} bytes pure 6502 machinecode op $6000)")
     
-    print(f"[2/4] Verbinden met Tang Nano 20K op {port} ({baud} baud)...")
+    print(f"[2/4] Verbinden met Tang Nano 20K op {port} ({baud} baud) -> *DRIVE {drive}...")
     s = serial.Serial(port, baud, timeout=1)
-    s.write(b'\x1b\r')
-    time.sleep(0.2)
+    s.write(b'\x1bQ\r')
+    time.sleep(0.25)
     s.read_all()
+    s.write(f"*SD\r".encode('ascii'))
+    time.sleep(0.5)
+    s.read_all()
+    s.write(f"*DRIVE {drive}\r".encode('ascii'))
+    time.sleep(0.6)
+    print(s.read_all().decode('ascii', 'ignore').strip())
     
     print(f"[3/4] 6502 Machinecode in RAM ($6000 - ${0x6000+len(data)-1:04X}) plaatsen...")
-    # Stuur in blokjes van 8 bytes met 32-bit (!&6000) / byte (?&6000) writes
     chunk_size = 8
     for offset in range(0, len(data), chunk_size):
         chunk = data[offset:offset+chunk_size]
@@ -34,14 +39,14 @@ def upload_and_save_asm(asm_file, sd_name, port='COM6', baud=115200):
         time.sleep(0.03)
         s.read_all()
         
-    print(f"[4/4] Opslaan op MicroSD-kaart met *BSAVE {sd_name} en starten met *RUN {sd_name}...")
+    print(f"[4/4] Opslaan op Drive {drive} met *BSAVE {sd_name} en starten met *RUN {sd_name}...")
     s.write(f"*BSAVE {sd_name}\r".encode('ascii'))
     time.sleep(1.5)
     out = s.read_all().decode('ascii', 'ignore')
     print(out.strip())
     
     s.write(f"*RUN {sd_name}\r".encode('ascii'))
-    time.sleep(2.5)
+    time.sleep(3.0)
     out2 = s.read_all()
     clean_out = ''.join(chr(b) if (32 <= b < 127 or b in (10, 13)) else '' for b in out2)
     print(clean_out.strip())
@@ -50,4 +55,5 @@ def upload_and_save_asm(asm_file, sd_name, port='COM6', baud=115200):
 if __name__ == '__main__':
     asm = sys.argv[1] if len(sys.argv) > 1 else 'matrix6502.asm'
     name = sys.argv[2] if len(sys.argv) > 2 else 'MATRIX'
-    upload_and_save_asm(asm, name)
+    drv = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+    upload_and_save_asm(asm, name, drv)

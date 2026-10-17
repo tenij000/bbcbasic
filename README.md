@@ -104,6 +104,22 @@ LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
 *BSAVE EXCEL                     : REM Sla 2 KB pure 6502 machinecode vanaf $6000 op
 ```
 
+#### 🕹️ Retro 6502 Machinetaal Collectie op Virtuele Floppy Drive 1 (`*DRIVE 1`)
+Schakel naar Drive 1 met `*DRIVE 1` en start direct een van de **10 klassieke 6502-machinetaalprogramma's** (`ORG $6000`):
+| Commando | Bronbestand | Jaar / Inspiratie | Beschrijving |
+| :--- | :--- | :---: | :--- |
+| **`*RUN WOZMON`** | `wozmon6502.asm` | 1976 | **Steve Wozniak's Apple-1 System Monitor** (`6000.603F`, `3000: ...`, `3000R`, `Q`=stop) |
+| **`*RUN CHESS`** | `microchess6502.asm` | 1976 | **Peter Jennings' KIM-1 MicroChess** (8x8 schaakbord + Herdermat-partij & GPU-grid) |
+| **`*RUN BREAKOUT`** | `breakout6502.asm` | 1976 | **Wozniak's Little Brick Out / Arcade Breakout** op Terminal + 720p MiniGPU |
+| **`*RUN DISASM`** | `disasm6502.asm` | 1976 | **Wozniak & Baum 6502 Disassembler** (decodeert live 6502 opcodes op `$6000`) |
+| **`*RUN LIFE`** | `life6502.asm` | 1970/76 | **Conway's Game of Life** (Glider, Blinker & R-pentomino kolonie op 6502 + GPU) |
+| **`*RUN MANDEL`** | `mandel6502.asm` | 1980 | **6502 Fixed-Point Mandelbrot Fractal** ($Z = Z^2 + C$ in 3.5 fixed-point + GPU) |
+| **`*RUN STARWARS`** | `starwars6502.asm` | 1983 | **Atari/Acorn 3D Vector Trench Run** (Hardware Bresenham lijnen, cirkels & sprite!) |
+| **`*RUN PRIMES`** | `primes6502.asm` | 1981 | **BYTE Magazine Sieve of Eratosthenes** (vindt alle 54 priemgetallen t/m 255 + GPU) |
+| **`*RUN EXCEL`** | `visicalc6502.asm` | 1979 | **VisiCalc / Mini-Excel 6502 Spreadsheet** (live rij-, kolom- en totaalsommen) |
+| **`*RUN MATRIX`** | `matrix6502.asm` | 1982 | **6502 Radar & Laser Vector Demo** op de 720p HDMI MiniGPU |
+
+
 ### 3. Databestanden Lezen & Schrijven (`OPENOUT` / `OPENIN` / `CLOSE#`)
 ```basic
 10 F% = OPENOUT("DATA.DAT")
