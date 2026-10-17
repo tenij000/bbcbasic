@@ -87,12 +87,16 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 ?&A002 = 50                      : REM Wacht exact 500 ms (50 x 10 ms) via de hardware timer
 ```
 
-### 2. MicroSD & Bestandssysteem Commando's
+### 2. MicroSD & Bestandssysteem Commando's (BASIC & Pure 6502 Machinetaal)
 ```basic
 SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op de SD-kaart op
 LOAD "MIJNPROG"                  : REM Laad een BASIC-programma vanaf de SD-kaart
 *CAT                             : REM Toon de catalogus (inhoudsopgave) van de SD-kaart
-*WIPE                            : REM Formatteer de SD-kaart catalogus (met J/N bevestiging)
+*WIPE                            : REM Formatteer de SD-kaart catalogus
+*RUN MATRIX                      : REM Laad puur 6502 machinetaal-bestand naar $6000 en start direct (JMP $6000)!
+*BRUN MATRIX                     : REM Zelfde als *RUN MATRIX
+*BLOAD MATRIX                    : REM Laad puur 6502 machinetaal-bestand naar $6000 (zonder direct te starten)
+*BSAVE MATRIX                    : REM Sla 2 KB pure 6502 machinecode vanaf $6000 op de SD-kaart op
 ```
 
 ### 3. Databestanden Lezen & Schrijven (`OPENOUT` / `OPENIN` / `CLOSE#`)

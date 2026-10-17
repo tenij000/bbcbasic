@@ -727,11 +727,13 @@ endmacro
    ; Not found in directory
    LDA sd_action
    BEQ save_new_slot
+   CMP #$02
+   BEQ save_new_slot
    CMP #$80
    BEQ save_new_slot
    CMP #$40
    BEQ openin_not_found
-   JMP load_not_found        ; If LOAD ($FF), report File not found!
+   JMP load_not_found        ; If LOAD ($FF/$FE), report File not found!
 .openin_not_found
    ; If OPENIN ($40) not found, return A = $00 (channel 0 = not found)
    LDA #$00
@@ -739,7 +741,7 @@ endmacro
    RTS
 
 .save_new_slot
-   ; For SAVE ($00) or CLOSE# ($80), use first free slot (or slot 0 if full)
+   ; For SAVE ($00), BSAVE ($02) or CLOSE# ($80), use first free slot (or slot 0 if full)
    LDA sd_free
    BPL use_free_slot
    LDA #$00
@@ -750,12 +752,14 @@ endmacro
 .found_existing
    LDA sd_action
    BEQ do_save_file
+   CMP #$02
+   BEQ do_save_file
    CMP #$80
    BEQ do_save_file
    JMP do_load_file
 
 .do_save_file
-   ;; --- SAVE FILE (BASIC program or OPENOUT stream) ---
+   ;; --- SAVE FILE (BASIC program, BSAVE $6000, or OPENOUT stream) ---
    ; Write "BBC!" + 16-byte filename + length into (sd_dir_ptr)
    LDY #$00
    LDA #'B': STA (sd_dir_ptr),Y: INY
@@ -772,6 +776,8 @@ endmacro
    BNE copy_fn_to_dir
 
    LDA sd_action
+   CMP #$02
+   BEQ save_bin_len
    CMP #$80
    BNE save_basic_len
    ; Data file from FILE_BUF ($7A00): length = f_len, 1 sector
@@ -781,6 +787,17 @@ endmacro
    LDA #$00
    STA (sd_dir_ptr),Y        ; Offset 21 = len_hi
    LDA #$01
+   STA sd_num_sec
+   BNE write_dir_and_data
+
+.save_bin_len
+   ; Binary file from $6000: 2 KB (4 sectors)
+   LDA #$00
+   STA (sd_dir_ptr),Y        ; Offset 20 = len_lo ($00)
+   INY
+   LDA #$08
+   STA (sd_dir_ptr),Y        ; Offset 21 = len_hi ($08 = 2048 bytes)
+   LDA #$04
    STA sd_num_sec
    BNE write_dir_and_data
 
@@ -803,13 +820,18 @@ endmacro
    JSR setup_dir_sec
    JSR disk_write_sector
 
-   ; Write sectors from PAGE ($0800) or FILE_BUF ($7A00)
+   ; Write sectors from PAGE ($0800), $6000, or FILE_BUF ($7A00)
    JSR setup_slot_sec
    LDA #$00: STA sd_ptr
    LDA sd_action
+   CMP #$02
+   BEQ save_from_6000
    CMP #$80
    BNE save_from_page
    LDA #>FILE_BUF
+   BNE save_set_ptr_hi
+.save_from_6000
+   LDA #$60
    BNE save_set_ptr_hi
 .save_from_page
    LDA &18
@@ -831,7 +853,7 @@ endmacro
 .pr_sav_done
    JMP print_fname_0600
 
-   ;; --- LOAD FILE (BASIC program or OPENIN stream) ---
+   ;; --- LOAD FILE (BASIC program, BLOAD $6000, or OPENIN stream) ---
 .do_load_file
    LDY #$14                  ; Offset 20 = len_lo
    LDA (sd_dir_ptr),Y
@@ -847,15 +869,22 @@ endmacro
    LDA #$00: STA sd_ptr
    LDA sd_action
    CMP #$40
-   BNE load_to_page
+   BNE load_check_bin
    LDA #$01: STA sd_num_sec
    LDA #>FILE_BUF: STA sd_ptr+1
    JSR disk_read_sector
    LDA #$01                  ; Return channel handle #1 for OPENIN
    RTS
 
+.load_check_bin
+   CMP #$FE
+   BNE load_to_page
+   LDA #$60
+   BNE load_set_ptr_hi
 .load_to_page
-   LDA &18:  STA sd_ptr+1    ; Load directly to PAGE ($0800)
+   LDA &18                   ; Load directly to PAGE ($0800)
+.load_set_ptr_hi
+   STA sd_ptr+1
 .load_sec_loop
    JSR disk_read_sector
    DEC sd_num_sec
@@ -986,7 +1015,7 @@ endmacro
    RTS
 
 ;; =============================================================
-;; OSCLI ($FFF7): *CAT (list files), *WIPE (format directory)
+;; OSCLI ($FFF7): *CAT, *WIPE, *RUN, *BRUN, *BLOAD, *BSAVE
 ;; =============================================================
 .nvoscli
    STX sd_ptr
@@ -1004,7 +1033,17 @@ endmacro
 .cli_check_cmd
    AND #$DF                  ; Uppercase first letter
    CMP #'W'
-   BEQ cli_wipe
+   BNE cli_not_w
+   JMP cli_wipe
+.cli_not_w
+   CMP #'R'
+   BNE cli_not_r
+   JMP cli_brun
+.cli_not_r
+   CMP #'B'
+   BNE cli_do_cat
+   JMP cli_b_cmd
+.cli_do_cat
    ; Default: *CAT (Catalogue)
    JSR sd_init
    JSR setup_dir_sec
@@ -1043,6 +1082,72 @@ endmacro
    CMP #$0F
    BNE cat_slot_loop
    RTS
+
+.cli_b_cmd
+   INY
+   LDA (sd_ptr),Y
+   AND #$DF                  ; Uppercase second letter (BSAVE, BLOAD, BRUN)
+   CMP #'S'
+   BEQ cli_bsave
+   CMP #'L'
+   BEQ cli_bload
+.cli_brun
+   JSR cli_extract_fn
+   LDA #$FE
+   JSR osfile_from_buf
+   JMP $6000                 ; Execute 6502 machine code at $6000!
+
+.cli_bload
+   JSR cli_extract_fn
+   LDA #$FE
+   JMP osfile_from_buf
+
+.cli_bsave
+   JSR cli_extract_fn
+   LDA #$02
+   JMP osfile_from_buf
+
+.cli_extract_fn
+   ; Skip command word until space, quote, or CR
+.cli_skip_w
+   LDA (sd_ptr),Y
+   CMP #$0D
+   BEQ cli_fn_copy_start
+   CMP #' '
+   BEQ cli_skip_fsp
+   CMP #'"'
+   BEQ cli_skip_fsp
+   INY
+   BNE cli_skip_w
+.cli_skip_fsp
+   LDA (sd_ptr),Y
+   CMP #' '
+   BEQ cli_next_fsp
+   CMP #'"'
+   BEQ cli_next_fsp
+   BNE cli_fn_copy_start
+.cli_next_fsp
+   INY
+   BNE cli_skip_fsp
+.cli_fn_copy_start
+   LDX #$00
+.cli_fn_copy
+   LDA (sd_ptr),Y
+   CMP #$0D
+   BEQ cli_fn_done
+   CMP #' '
+   BEQ cli_fn_done
+   CMP #'"'
+   BEQ cli_fn_done
+   STA $0600,X
+   INY
+   INX
+   CPX #$10
+   BNE cli_fn_copy
+.cli_fn_done
+   LDA #$0D
+   STA $0600,X
+   JMP norm_filename
 
 .cli_wipe
    JSR sd_init
