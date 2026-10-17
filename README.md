@@ -24,9 +24,10 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
   * Echte **CRT Hardware-Scrolling (`scroll_offset`)**: zodra de cursor onderaan het scherm komt en je op Enter drukt, schuift het hele tekstbeeld in 1 kloktik omhoog en wordt de onderste regel in 3 µs gewist.
 * **💾 Dual-Storage Besturingssysteem (4 KB 6502 SD-MOS ROM):**
   * **MicroSD-kaart (SPI Master op `$A010-$A011`):** Ondersteunt SDHC/SDXC-kaarten met een ingebouwd **SuperFloppy Catalogus-bestandssysteem** (32 bestandsslots van elk 32 KB = 1 MB directe retro-opslag).
-  * **16 KB Interne FPGA RAM-Disk (`$A012-$A014`):** Supersnelle automatische fallback in FPGA Block-RAM (BSRAM) als er geen SD-kaart geplaatst is.
-  * **Volledige BBC BASIC bestandscommando's:**
-    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `*CAT`, `*WIPE`
+  * **4 MB Interne SDRAM-Disk & RAM-Expansie (`$A012-$A015`):** Gebruikt de bovenste 4 Megabyte van het 64 Mbit SDRAM (op 74,25 MHz!) als razendsnelle interne RAM-disk (met volledige 32 KB per bestandsslot) én als 4 MB RAM-expansie voor de 6502, waarmee **8 FPGA BSRAM-blokken** zijn vrijgespeeld!
+  * **Volledige BBC BASIC & 6502 Machinetaal bestandscommando's:**
+    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `*CAT`, `*WIPE`, `*SDRAM`, `*SD`
+    * Pure 6502 Machinetaal (`$6000`): `*RUN <NAAM>`, `*BRUN <NAAM>`, `*BLOAD <NAAM>`, `*BSAVE <NAAM>`
     * Databestanden (Random Access / Streams): `OPENOUT`, `OPENIN`, `OPENUP`, `PRINT#`, `INPUT#`, `BPUT#`, `BGET#`, `EOF#`, `PTR#`, `EXT#`, `CLOSE#`.
 * **⌨️ Zelfstandig werken met PS/2-Toetsenbord + PC-Terminal:**
   * Hardware PS/2-toetsenbordcontroller (`ps2_keyboard.v`) voor de **Olimex PS/2-module** (pinnen 73 & 74), gelijktijdig te gebruiken met de USB-UART serieel-terminal (115200 baud).
@@ -40,14 +41,15 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | **`$0000 - $00FF`** | 256 B | **Zero Page** (BBC BASIC II + SD-MOS variabelen `$E0-$EF`) |
 | **`$0100 - $01FF`** | 256 B | **6502 Hardware Stack** |
 | **`$0200 - $07FF`** | 1,5 KB | **MOS & BBC BASIC Systeemwerkruimte** |
-| **`$0800 - $79FF`** | **28,5 KB** | **BBC BASIC Programma-geheugen (`PAGE = $0800`, `HIMEM = $7A00`)** |
+| **`$0800 - $5FFF`** | **22 KB** | **BBC BASIC Programma-geheugen (`PAGE = $0800`)** |
+| **`$6000 - $79FF`** | **6,5 KB** | **Pure 6502 Machinetaal / Binary werkgebied (`*RUN`, `*BLOAD`, `*BSAVE`)** |
 | **`$7A00 - $7BFF`** | 512 B | **`FILE_BUF`**: Stream-buffer voor `OPENIN` / `OPENOUT` (`PRINT#` / `INPUT#`) |
 | **`$7C00 - $7DFF`** | 512 B | **`SD_BUF`**: Sector-buffer voor MicroSD SPI & Catalogus |
 | **`$7E00 - $7FFF`** | 512 B | **IRQ Buffers** voor UART / PS/2 toetsenbord |
 | **`$A000 - $A001`** | 2 B | **6850 ACIA Emulatie**: Status (`$A000`), Toetsenbord-in / GPU VDU-uit (`$A001`) |
 | **`$A002`** | 1 B | **Hardware Delay Timer**: Schrijf `N` om de CPU `N × 10 ms` te pauzeren via `RDY` |
 | **`$A010 - $A011`** | 2 B | **MicroSD Hardware SPI Controller**: Data (`$A010`), CS & Kloksnelheid (`$A011`) |
-| **`$A012 - $A014`** | 3 B | **16 KB Interne FPGA RAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`) |
+| **`$A012 - $A015`** | 4 B | **4 MB Interne SDRAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`), Bank 0..63 (`$A015`) |
 | **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
 | **`$C000 - $FFFF`** | **16 KB** | **Acorn BBC BASIC II ROM + MOS Vectoren** (`Basic2.asm` + `SBC_MOS.asm`) |
 
@@ -87,16 +89,18 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 ?&A002 = 50                      : REM Wacht exact 500 ms (50 x 10 ms) via de hardware timer
 ```
 
-### 2. MicroSD & Bestandssysteem Commando's (BASIC & Pure 6502 Machinetaal)
+### 2. MicroSD, 4 MB SDRAM-Disk & Pure 6502 Machinetaal Commando's
 ```basic
-SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op de SD-kaart op
-LOAD "MIJNPROG"                  : REM Laad een BASIC-programma vanaf de SD-kaart
-*CAT                             : REM Toon de catalogus (inhoudsopgave) van de SD-kaart
-*WIPE                            : REM Formatteer de SD-kaart catalogus
-*RUN MATRIX                      : REM Laad puur 6502 machinetaal-bestand naar $6000 en start direct (JMP $6000)!
-*BRUN MATRIX                     : REM Zelfde als *RUN MATRIX
-*BLOAD MATRIX                    : REM Laad puur 6502 machinetaal-bestand naar $6000 (zonder direct te starten)
-*BSAVE MATRIX                    : REM Sla 2 KB pure 6502 machinecode vanaf $6000 op de SD-kaart op
+SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op
+LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
+*CAT                             : REM Toon de catalogus (inhoudsopgave)
+*WIPE                            : REM Formatteer de huidige catalogus
+*SDRAM                           : REM Schakel over naar de interne 4 MB SDRAM-Disk (74,25 MHz!)
+*SD                              : REM Schakel terug naar de MicroSD-kaart
+*RUN EXCEL                       : REM Start VisiCalc / Mini-Excel 6502 (pure 6502 machinetaal op $6000)!
+*RUN MATRIX                      : REM Start de 6502 Radar & Laser demo vanaf SD-kaart
+*BLOAD EXCEL                     : REM Laad puur 6502 machinetaal-bestand naar $6000 (zonder te starten)
+*BSAVE EXCEL                     : REM Sla 2 KB pure 6502 machinecode vanaf $6000 op
 ```
 
 ### 3. Databestanden Lezen & Schrijven (`OPENOUT` / `OPENIN` / `CLOSE#`)

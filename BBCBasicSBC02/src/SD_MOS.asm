@@ -34,11 +34,12 @@ RX_BUFFER   = $7E00
 TX_BUFFER   = $7F00
 UART        = $A000
 
-SD_DATA     = $A010
-SD_CTRL     = $A011
-RD_ADDR_LO  = $A012
-RD_ADDR_HI  = $A013
-RD_DATA     = $A014
+SD_DATA      = $A010
+SD_CTRL      = $A011
+RD_ADDR_LO   = $A012
+RD_ADDR_HI   = $A013
+RD_DATA      = $A014
+RD_ADDR_BANK = $A015
 
 FILE_BUF    = $7A00     ; 512-byte stream buffer for OPENIN / OPENOUT
 SD_BUF      = $7C00     ; 512-byte directory / sector buffer
@@ -47,6 +48,7 @@ SD_BUF      = $7C00     ; 512-byte directory / sector buffer
 f_mode      = $02E0     ; $00=closed, $40=OPENIN, $80=OPENOUT, $C0=OPENUP
 f_idx       = $02E1     ; Current read/write byte index (0..255)
 f_len       = $02E2     ; File byte length (0..255)
+f_sdram     = $02E3     ; $80 = force 4MB SDRAM-Disk, $00 = SD Card with SDRAM fallback
 f_name      = $02E4     ; 16-byte normalized filename for OPENOUT
 
 ;; Zero-page workspace ($00E0 - $00EF, reserved for MOS)
@@ -240,8 +242,10 @@ endmacro
    TYA
    RTS
 
-;; Initialize SD/SDHC card (or fall back to FPGA-Disk if no card)
+;; Initialize SD/SDHC card (or fall back to 4 MB SDRAM-Disk if no card or f_sdram=$80)
 .sd_init
+   LDA f_sdram
+   BMI no_sd_fallback        ; Forced 4 MB SDRAM-Disk mode (*SDRAM)
    LDA #$03                  ; slow_mode = 1, CS = 1
    STA sd_ctrl_val
    STA SD_CTRL
@@ -269,7 +273,7 @@ endmacro
    BNE cmd0_retry
 
 .no_sd_fallback
-   LDA #$00                  ; $00 = Use internal 16KB FPGA-Disk
+   LDA #$00                  ; $00 = Use internal 4 MB SDRAM-Disk
    STA sd_type
    JSR sd_deselect
    RTS
@@ -389,10 +393,13 @@ endmacro
 .disk_read_sector
    LDA sd_type
    BNE sd_read_sec
-   ; FPGA-Disk Fallback Read
+   ; 4 MB SDRAM-Disk Read
    LDA sd_sec_lo
    ASL A
    STA RD_ADDR_HI
+   LDA sd_sec_hi
+   ROL A
+   STA RD_ADDR_BANK
    LDY #$00
 .rd_read_p0
    STY RD_ADDR_LO
@@ -410,6 +417,8 @@ endmacro
    BNE rd_read_p1
    INC sd_ptr+1
    INC sd_sec_lo
+   BNE rd_sec_done
+   INC sd_sec_hi
    RTS
 
 .sd_read_sec
@@ -456,10 +465,13 @@ endmacro
 .disk_write_sector
    LDA sd_type
    BNE sd_write_sec
-   ; FPGA-Disk Fallback Write
+   ; 4 MB SDRAM-Disk Write
    LDA sd_sec_lo
    ASL A
    STA RD_ADDR_HI
+   LDA sd_sec_hi
+   ROL A
+   STA RD_ADDR_BANK
    LDY #$00
 .rd_write_p0
    STY RD_ADDR_LO
@@ -477,6 +489,8 @@ endmacro
    BNE rd_write_p1
    INC sd_ptr+1
    INC sd_sec_lo
+   BNE wr_sec_done
+   INC sd_sec_hi
    RTS
 
 .sd_write_sec
@@ -523,26 +537,17 @@ endmacro
 ;; =============================================================
 ;; Directory & Filename Helpers
 ;; =============================================================
-;; Set (sd_sec_hi:sd_sec_lo) to Directory Sector (1023 on SD, 0 on FPGA-Disk)
+;; Set (sd_sec_hi:sd_sec_lo) to Directory Sector (1023 on both SD and 4 MB SDRAM-Disk)
 ;; and set sd_ptr = SD_BUF ($7C00)
 .setup_dir_sec
    LDA #$00: STA sd_ptr
    LDA #>SD_BUF: STA sd_ptr+1
-   LDA sd_type
-   BEQ dir_is_fpga
    LDA #$FF: STA sd_sec_lo   ; Sector 1023 ($03FF)
    LDA #$03: STA sd_sec_hi
    RTS
-.dir_is_fpga
-   LDA #$00: STA sd_sec_lo
-   STA sd_sec_hi
-   RTS
 
-;; Set (sd_sec_hi:sd_sec_lo) to Data Start Sector for slot in sd_slot
+;; Set (sd_sec_hi:sd_sec_lo) to Data Start Sector for slot in sd_slot (32 KB = 64 sectors per slot)
 .setup_slot_sec
-   LDA sd_type
-   BEQ slot_is_fpga
-   ; SD Card: Sector = $0400 + (sd_slot * 64)
    LDA sd_slot
    AND #$03
    ASL A: ASL A: ASL A: ASL A: ASL A: ASL A
@@ -551,16 +556,6 @@ endmacro
    LSR A: LSR A
    CLC
    ADC #$04
-   STA sd_sec_hi
-   RTS
-.slot_is_fpga
-   ; FPGA-Disk: Sector = 1 + (sd_slot * 2) (1KB = 2 sectors per slot, 15 slots!)
-   LDA sd_slot
-   ASL A
-   CLC
-   ADC #$01
-   STA sd_sec_lo
-   LDA #$00
    STA sd_sec_hi
    RTS
 
@@ -676,7 +671,7 @@ endmacro
 .msg_sd_tag
    EQUS "[SD-KAART] ", 0
 .msg_fpga_tag
-   EQUS "[FPGA-DISK] ", 0
+   EQUS "[SDRAM-DISK] ", 0
 .msg_saved
    EQUS "OPGESLAGEN: ", 0
 .msg_loaded
@@ -1041,8 +1036,12 @@ endmacro
    JMP cli_brun
 .cli_not_r
    CMP #'B'
-   BNE cli_do_cat
+   BNE cli_not_b
    JMP cli_b_cmd
+.cli_not_b
+   CMP #'S'
+   BNE cli_do_cat
+   JMP cli_s_cmd
 .cli_do_cat
    ; Default: *CAT (Catalogue)
    JSR sd_init
@@ -1082,6 +1081,21 @@ endmacro
    CMP #$0F
    BNE cat_slot_loop
    RTS
+
+.cli_s_cmd
+   ; *SDRAM or *SD: check 3rd letter (after 'S','D')
+   INY: INY
+   LDA (sd_ptr),Y
+   AND #$DF
+   CMP #'R'
+   BEQ cli_use_sdram
+   LDA #$00
+   STA f_sdram
+   JMP cli_do_cat
+.cli_use_sdram
+   LDA #$80
+   STA f_sdram
+   JMP cli_do_cat
 
 .cli_b_cmd
    INY
@@ -1474,6 +1488,7 @@ ENDIF
    STA BRKV + 1
    INX
    STX f_mode
+   STX f_sdram
    LDY #ZP_END - ZP_START + 1
 .clrloop
    STX ZP_START - 1, Y

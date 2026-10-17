@@ -130,11 +130,18 @@ module top(
     reg [7:0] mos_rom [0:4095];
     reg [7:0] cpu_rom [0:16383];
     
-    // 16KB Internal FPGA-Disk Fallback (BSRAM)
-    reg [7:0] ramdisk [0:16383];
-    reg [7:0] rd_addr_lo = 8'h00;
-    reg [5:0] rd_addr_hi = 6'h00;
-    reg [7:0] rd_dout    = 8'h00;
+    // 4 MB Internal SDRAM-Disk Fallback & RAM Expansion ($A012-$A015)
+    reg [7:0]  rd_addr_lo   = 8'h00;
+    reg [7:0]  rd_addr_hi   = 8'h00;
+    reg [5:0]  rd_addr_bank = 6'h00;
+    wire [7:0] rd_dout;
+    reg        rd_req_toggle = 1'b0;
+    reg        rd_req_we     = 1'b0;
+    reg [21:0] rd_req_addr   = 22'd0;
+    reg [7:0]  rd_req_wdata  = 8'h00;
+    wire       rd_ack_toggle;
+    reg [2:0]  rd_ack_sync   = 3'b000;
+    wire       rd_busy       = (rd_req_toggle != rd_ack_sync[2]);
     
     initial begin
         $readmemh("mos_ext.hex", mos_rom);
@@ -184,64 +191,7 @@ module top(
     
     // ACIA Control Register
     reg [7:0] acia_ctrl = 0;
-    
-    always @(posedge sys_clk) begin
-        // RAM write (0x0000 - 0x7FFF)
-        if (cpu_we && cpu_ab < 16'h8000) begin
-            cpu_ram[cpu_ab[14:0]] <= cpu_do;
-        end
-        
-        // ACIA Control write (0xA000)
-        if (cpu_we && cpu_ab == 16'hA000) begin
-            acia_ctrl <= cpu_do;
-        end
-        
-        // ACIA Data write (0xA001)
-        term_rx_valid_cpu <= 0;
-        if (cpu_we && cpu_ab == 16'hA001) begin
-            term_rx_data_cpu <= cpu_do;
-            term_rx_valid_cpu <= 1;
-        end
-        
-        // MicroSD Control & Internal FPGA-Disk registers ($A011 - $A014)
-        if (cpu_we && cpu_ab == 16'hA011) begin
-            sd_ctrl <= cpu_do[1:0];
-        end
-        if (cpu_we && cpu_ab == 16'hA012) begin
-            rd_addr_lo <= cpu_do;
-        end
-        if (cpu_we && cpu_ab == 16'hA013) begin
-            rd_addr_hi <= cpu_do[5:0];
-        end
-        if (cpu_we && cpu_ab == 16'hA014) begin
-            ramdisk[{rd_addr_hi, rd_addr_lo}] <= cpu_do;
-        end
-        rd_dout <= ramdisk[{rd_addr_hi, rd_addr_lo}];
-        
-        // ACIA Data read clears status (0xA001)
-        if (!cpu_we && cpu_ab == 16'hA001) begin
-            kbd_ready <= 0;
-        end
-        
-        // If in terminal mode and we get UART data (excluding magic seq), feed to CPU
-        // Placed after the read clear so that incoming characters always take precedence
-        // Filter out noise (only allow printable ASCII + CR, LF, BS, ESC)
-        if (uart_valid && (uart_mode == 0) && (
-            (uart_data >= 8'h20 && uart_data < 8'h7F) || 
-            uart_data == 8'h0D || uart_data == 8'h0A || 
-            uart_data == 8'h08 || uart_data == 8'h1B ||
-            uart_data == 8'h43 || uart_data == 8'h57 || 
-            uart_data == 8'h63 || uart_data == 8'h77
-        )) begin
-            kbd_data <= uart_data;
-            kbd_ready <= 1;
-        end else if (ps2_ascii_valid && (uart_mode == 0)) begin
-            kbd_data <= ps2_ascii_code;
-            kbd_ready <= 1;
-            ps2_led_toggle <= ~ps2_led_toggle;
-        end
-    end
-    
+
     // --- BBC BASIC GPU Line Drawer Signals ---
     wire signed [15:0] gpu_x0, gpu_x1;
     wire signed [15:0] gpu_y0, gpu_y1;
@@ -270,7 +220,74 @@ module top(
     end
 
     wire term_busy;
-    wire cpu_rdy = !delay_active && !gpu_busy_sys && !gpu_start_sys && !sd_busy && !term_busy;
+    wire cpu_rdy = !delay_active && !gpu_busy_sys && !gpu_start_sys && !sd_busy && !term_busy && !rd_busy;
+    
+    always @(posedge sys_clk) begin
+        rd_ack_sync <= {rd_ack_sync[1:0], rd_ack_toggle};
+
+        // RAM write (0x0000 - 0x7FFF)
+        if (cpu_rdy && cpu_we && cpu_ab < 16'h8000) begin
+            cpu_ram[cpu_ab[14:0]] <= cpu_do;
+        end
+        
+        // ACIA Control write (0xA000)
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA000) begin
+            acia_ctrl <= cpu_do;
+        end
+        
+        // ACIA Data write (0xA001)
+        term_rx_valid_cpu <= 0;
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA001) begin
+            term_rx_data_cpu <= cpu_do;
+            term_rx_valid_cpu <= 1;
+        end
+        
+        // MicroSD Control & 4 MB SDRAM-Disk registers ($A011 - $A015)
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA011) begin
+            sd_ctrl <= cpu_do[1:0];
+        end
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA012) begin
+            rd_addr_lo    <= cpu_do;
+            rd_req_addr   <= {rd_addr_bank, rd_addr_hi, cpu_do};
+            rd_req_we     <= 1'b0; // Trigger SDRAM Read Prefetch into rd_dout
+            rd_req_toggle <= ~rd_req_toggle;
+        end
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA013) begin
+            rd_addr_hi <= cpu_do;
+        end
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA014) begin
+            rd_req_addr   <= {rd_addr_bank, rd_addr_hi, rd_addr_lo};
+            rd_req_wdata  <= cpu_do;
+            rd_req_we     <= 1'b1; // Trigger SDRAM Write
+            rd_req_toggle <= ~rd_req_toggle;
+        end
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA015) begin
+            rd_addr_bank <= cpu_do[5:0];
+        end
+        
+        // ACIA Data read clears status (0xA001)
+        if (cpu_rdy && !cpu_we && cpu_ab == 16'hA001) begin
+            kbd_ready <= 0;
+        end
+        
+        // If in terminal mode and we get UART data (excluding magic seq), feed to CPU
+        // Placed after the read clear so that incoming characters always take precedence
+        // Filter out noise (only allow printable ASCII + CR, LF, BS, ESC)
+        if (uart_valid && (uart_mode == 0) && (
+            (uart_data >= 8'h20 && uart_data < 8'h7F) || 
+            uart_data == 8'h0D || uart_data == 8'h0A || 
+            uart_data == 8'h08 || uart_data == 8'h1B ||
+            uart_data == 8'h43 || uart_data == 8'h57 || 
+            uart_data == 8'h63 || uart_data == 8'h77
+        )) begin
+            kbd_data <= uart_data;
+            kbd_ready <= 1;
+        end else if (ps2_ascii_valid && (uart_mode == 0)) begin
+            kbd_data <= ps2_ascii_code;
+            kbd_ready <= 1;
+            ps2_led_toggle <= ~ps2_led_toggle;
+        end
+    end
 
     // Address decoding for CPU DI (Synchronous for BRAM inference, held when !cpu_rdy)
     always @(posedge sys_clk) begin
@@ -403,6 +420,12 @@ module top(
         .gpu_color(gpu_fb_color),
         .gpu_write(gpu_fb_write),
         .gpu_ack(gpu_fb_ack),
+        .rd_req_toggle(rd_req_toggle),
+        .rd_req_we(rd_req_we),
+        .rd_req_addr(rd_req_addr),
+        .rd_req_wdata(rd_req_wdata),
+        .rd_rdata(rd_dout),
+        .rd_ack_toggle(rd_ack_toggle),
         .O_sdram_clk(O_sdram_clk),
         .O_sdram_cke(O_sdram_cke),
         .O_sdram_cs_n(O_sdram_cs_n),

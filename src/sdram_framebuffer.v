@@ -20,6 +20,14 @@ module sdram_framebuffer (
     input  wire        gpu_write,
     output reg         gpu_ack = 0,
 
+    // 6502 CPU SDRAM-Disk Interface (Upper 4 MB of SDRAM: addr[20] == 1)
+    input  wire        rd_req_toggle,
+    input  wire        rd_req_we,
+    input  wire [21:0] rd_req_addr,
+    input  wire [7:0]  rd_req_wdata,
+    output reg  [7:0]  rd_rdata = 0,
+    output reg         rd_ack_toggle = 0,
+
     // SDRAM Physical Pins
     output wire        O_sdram_clk,
     output wire        O_sdram_cke,
@@ -211,8 +219,13 @@ module sdram_framebuffer (
     localparam ARB_WRITE = 3;
     localparam ARB_READ = 4;
     localparam ARB_WRITE_GPU = 5;
+    localparam ARB_WRITE_CPU = 6;
+    localparam ARB_READ_CPU  = 7;
     reg [2:0] arb_state = 0;
     reg [2:0] arb_next_state = 0;
+
+    reg [2:0] rd_req_sync = 0;
+    reg [1:0] rd_byte_sel = 0;
 
     reg lb_read_ack_reg = 0;
     reg lb_we_reg = 0;
@@ -247,7 +260,11 @@ module sdram_framebuffer (
             sdram_wr <= 0;
             sdram_refresh <= 0;
             gpu_ack <= 0;
+            rd_req_sync <= 0;
+            rd_ack_toggle <= 0;
+            rd_rdata <= 0;
         end else begin
+            rd_req_sync <= {rd_req_sync[1:0], rd_req_toggle};
             lb_read_ack_reg <= 0;
             lb_we_reg <= 0;
             uart_write_ack_reg <= 0;
@@ -286,6 +303,24 @@ module sdram_framebuffer (
                         lb_read_ack_reg <= 1;
                         arb_next_state <= ARB_READ;
                         arb_state <= ARB_WAIT_BUSY;
+                    end else if (rd_req_sync[2] != rd_ack_toggle) begin
+                        // Upper 4 MB of SDRAM (addr[20] = 1'b1)
+                        sdram_addr <= {1'b1, rd_req_addr[21:2]};
+                        rd_byte_sel <= rd_req_addr[1:0];
+                        if (rd_req_we) begin
+                            case (rd_req_addr[1:0])
+                                2'b00: begin sdram_wstrb <= 4'b0001; sdram_din <= {24'd0, rd_req_wdata}; end
+                                2'b01: begin sdram_wstrb <= 4'b0010; sdram_din <= {16'd0, rd_req_wdata, 8'd0}; end
+                                2'b10: begin sdram_wstrb <= 4'b0100; sdram_din <= {8'd0, rd_req_wdata, 16'd0}; end
+                                2'b11: begin sdram_wstrb <= 4'b1000; sdram_din <= {rd_req_wdata, 24'd0}; end
+                            endcase
+                            sdram_wr <= 1;
+                            arb_next_state <= ARB_WRITE_CPU;
+                        end else begin
+                            sdram_rd <= 1;
+                            arb_next_state <= ARB_READ_CPU;
+                        end
+                        arb_state <= ARB_WAIT_BUSY;
                     end
                 end
                 ARB_WAIT_BUSY: begin
@@ -312,6 +347,24 @@ module sdram_framebuffer (
                     if (sdram_data_ready) begin
                         lb_wdata_reg <= sdram_dout;
                         lb_we_reg <= 1;
+                        arb_state <= ARB_IDLE;
+                    end
+                end
+                ARB_WRITE_CPU: begin
+                    if (!sdram_busy) begin
+                        rd_ack_toggle <= rd_req_sync[2];
+                        arb_state <= ARB_IDLE;
+                    end
+                end
+                ARB_READ_CPU: begin
+                    if (sdram_data_ready) begin
+                        case (rd_byte_sel)
+                            2'b00: rd_rdata <= sdram_dout[7:0];
+                            2'b01: rd_rdata <= sdram_dout[15:8];
+                            2'b10: rd_rdata <= sdram_dout[23:16];
+                            2'b11: rd_rdata <= sdram_dout[31:24];
+                        endcase
+                        rd_ack_toggle <= rd_req_sync[2];
                         arb_state <= ARB_IDLE;
                     end
                 end
