@@ -94,7 +94,8 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op
 LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
 *CAT                             : REM Toon de catalogus (inhoudsopgave)
-*WIPE                            : REM Formatteer de huidige catalogus
+*DRIVE 0                         : REM Kies virtuele Floppy Drive 0 t/m 3 (4 x 15 bestanden op SD én SDRAM!)
+*WIPE                            : REM Formatteer de huidige drive-catalogus
 *SDRAM                           : REM Schakel over naar de interne 4 MB SDRAM-Disk (74,25 MHz!)
 *SD                              : REM Schakel terug naar de MicroSD-kaart
 *RUN EXCEL                       : REM Start VisiCalc / Mini-Excel 6502 (pure 6502 machinetaal op $6000)!

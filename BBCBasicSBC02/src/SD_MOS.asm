@@ -50,6 +50,7 @@ f_idx       = $02E1     ; Current read/write byte index (0..255)
 f_len       = $02E2     ; File byte length (0..255)
 f_sdram     = $02E3     ; $80 = force 4MB SDRAM-Disk, $00 = SD Card with SDRAM fallback
 f_name      = $02E4     ; 16-byte normalized filename for OPENOUT
+f_drive     = $02F4     ; Current virtual floppy drive number (0..3)
 
 ;; Zero-page workspace ($00E0 - $00EF, reserved for MOS)
 sd_ptr      = $00E0     ; 2 bytes ($E0, $E1)
@@ -537,13 +538,18 @@ endmacro
 ;; =============================================================
 ;; Directory & Filename Helpers
 ;; =============================================================
-;; Set (sd_sec_hi:sd_sec_lo) to Directory Sector (1023 on both SD and 4 MB SDRAM-Disk)
+;; Set (sd_sec_hi:sd_sec_lo) to Directory Sector ($03FF + f_drive*$0400)
 ;; and set sd_ptr = SD_BUF ($7C00)
 .setup_dir_sec
    LDA #$00: STA sd_ptr
    LDA #>SD_BUF: STA sd_ptr+1
-   LDA #$FF: STA sd_sec_lo   ; Sector 1023 ($03FF)
-   LDA #$03: STA sd_sec_hi
+   LDA #$FF: STA sd_sec_lo   ; Sector 1023 ($03FF) for Drive 0
+   LDA f_drive
+   AND #$03
+   ASL A: ASL A
+   CLC
+   ADC #$03
+   STA sd_sec_hi
    RTS
 
 ;; Set (sd_sec_hi:sd_sec_lo) to Data Start Sector for slot in sd_slot (32 KB = 64 sectors per slot)
@@ -552,10 +558,16 @@ endmacro
    AND #$03
    ASL A: ASL A: ASL A: ASL A: ASL A: ASL A
    STA sd_sec_lo
+   LDA f_drive
+   AND #$03
+   ASL A: ASL A
+   CLC
+   ADC #$04
+   STA sd_sec_hi
    LDA sd_slot
    LSR A: LSR A
    CLC
-   ADC #$04
+   ADC sd_sec_hi
    STA sd_sec_hi
    RTS
 
@@ -633,14 +645,14 @@ endmacro
 .name_no
    RTS
 
-;; Print null-terminated string from (sd_dir_ptr) or inline helper
+;; Print storage tag with drive number: "[SD-KAART D0] " or "[SDRAM-DISK D0] "
 .print_storage_tag
    LDA sd_type
    BEQ tag_fpga
    LDX #$00
 .tag_sd_loop
    LDA msg_sd_tag,X
-   BEQ tag_done
+   BEQ tag_drive
    JSR OSASCI
    INX
    BNE tag_sd_loop
@@ -648,12 +660,18 @@ endmacro
    LDX #$00
 .tag_fpga_loop
    LDA msg_fpga_tag,X
-   BEQ tag_done
+   BEQ tag_drive
    JSR OSASCI
    INX
    BNE tag_fpga_loop
-.tag_done
-   RTS
+.tag_drive
+   LDA f_drive
+   AND #$03
+   CLC
+   ADC #'0'
+   JSR OSASCI
+   LDA #']': JSR OSASCI
+   LDA #' ': JMP OSASCI
 
 .print_fname_0600
    LDY #$00
@@ -669,9 +687,9 @@ endmacro
    JMP OSNEWL
 
 .msg_sd_tag
-   EQUS "[SD-KAART] ", 0
+   EQUS "[SD-KAART D", 0
 .msg_fpga_tag
-   EQUS "[SDRAM-DISK] ", 0
+   EQUS "[SDRAM-DISK D", 0
 .msg_saved
    EQUS "OPGESLAGEN: ", 0
 .msg_loaded
@@ -1040,8 +1058,12 @@ endmacro
    JMP cli_b_cmd
 .cli_not_b
    CMP #'S'
-   BNE cli_do_cat
+   BNE cli_not_s
    JMP cli_s_cmd
+.cli_not_s
+   CMP #'D'
+   BNE cli_do_cat
+   JMP cli_drive
 .cli_do_cat
    ; Default: *CAT (Catalogue)
    JSR sd_init
@@ -1081,6 +1103,13 @@ endmacro
    CMP #$0F
    BNE cat_slot_loop
    RTS
+
+.cli_drive
+   JSR cli_extract_fn
+   LDA $0600
+   AND #$03
+   STA f_drive
+   JMP cli_do_cat
 
 .cli_s_cmd
    ; *SDRAM or *SD: check 3rd letter (after 'S','D')
@@ -1489,6 +1518,7 @@ ENDIF
    INX
    STX f_mode
    STX f_sdram
+   STX f_drive
    LDY #ZP_END - ZP_START + 1
 .clrloop
    STX ZP_START - 1, Y
