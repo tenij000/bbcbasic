@@ -694,15 +694,39 @@ endmacro
    EQUS "OPGESLAGEN: ", 0
 .msg_loaded
    EQUS "INGELADEN: ", 0
+.msg_deleted
+   EQUS "GEWIST: ", 0
+.msg_renamed
+   EQUS "HERNOEMD: ", 0
 .msg_cat_hdr
    EQUS "CATALOGUS:", $0D, 0
 .msg_wiped
    EQUS "CATALOGUS GEWIST!", $0D, 0
 
+;; Print byte in A as 2 uppercase HEX characters (preserves X, Y)
+.pr_hex_byte
+   PHA
+   LSR A: LSR A: LSR A: LSR A
+   JSR pr_hex_nib
+   PLA
+.pr_hex_nib
+   AND #$0F
+   ORA #$30
+   CMP #$3A
+   BCC pr_hex_out
+   ADC #$06
+.pr_hex_out
+   JMP OSASCI
+
 ;; =============================================================
 ;; OSFILE ($FFDD):
 ;;   A = $00: SAVE BASIC program (PAGE..TOP)
+;;   A = $02: BSAVE 2 KB from $6000
+;;   A = $04: COPY save from $6000 with length (f_len, f_idx)
 ;;   A = $FF: LOAD BASIC program (to PAGE)
+;;   A = $FE: BLOAD to $6000
+;;   A = $FD: DELETE file from directory
+;;   A = $FC: RENAME file to f_name
 ;;   A = $80: Save FILE_BUF ($7A00, length f_len) on CLOSE#
 ;;   A = $40: Load FILE_BUF ($7A00) on OPENIN
 ;; =============================================================
@@ -742,11 +766,13 @@ endmacro
    BEQ save_new_slot
    CMP #$02
    BEQ save_new_slot
+   CMP #$04
+   BEQ save_new_slot
    CMP #$80
    BEQ save_new_slot
    CMP #$40
    BEQ openin_not_found
-   JMP load_not_found        ; If LOAD ($FF/$FE), report File not found!
+   JMP load_not_found        ; If LOAD/DELETE/RENAME, report File not found!
 .openin_not_found
    ; If OPENIN ($40) not found, return A = $00 (channel 0 = not found)
    LDA #$00
@@ -754,7 +780,7 @@ endmacro
    RTS
 
 .save_new_slot
-   ; For SAVE ($00), BSAVE ($02) or CLOSE# ($80), use first free slot (or slot 0 if full)
+   ; For SAVE ($00), BSAVE ($02), COPY ($04) or CLOSE# ($80), use first free slot (or slot 0 if full)
    LDA sd_free
    BPL use_free_slot
    LDA #$00
@@ -764,15 +790,66 @@ endmacro
 
 .found_existing
    LDA sd_action
+   CMP #$FD
+   BEQ do_delete_file
+   CMP #$FC
+   BEQ do_rename_file
+   CMP #$00
    BEQ do_save_file
    CMP #$02
+   BEQ do_save_file
+   CMP #$04
    BEQ do_save_file
    CMP #$80
    BEQ do_save_file
    JMP do_load_file
 
+.do_delete_file
+   LDY #$1F
+   LDA #$00
+.del_clr_loop
+   STA (sd_dir_ptr),Y
+   DEY
+   BPL del_clr_loop
+   JSR setup_dir_sec
+   JSR disk_write_sector
+   JSR print_storage_tag
+   LDX #$00
+.pr_del
+   LDA msg_deleted,X
+   BEQ pr_del_done
+   JSR OSASCI
+   INX
+   BNE pr_del
+.pr_del_done
+   JMP print_fname_0600
+
+.do_rename_file
+   LDX #$00
+   LDY #$04
+.ren_copy_loop
+   LDA f_name,X
+   STA $0600,X
+   STA (sd_dir_ptr),Y
+   INY
+   INX
+   CPX #$10
+   BNE ren_copy_loop
+   JSR setup_dir_sec
+   JSR disk_write_sector
+   JSR print_storage_tag
+   LDX #$00
+.pr_ren
+   LDA msg_renamed,X
+   BEQ pr_ren_done
+   JSR OSASCI
+   INX
+   BNE pr_ren
+.pr_ren_done
+   JMP print_fname_0600
+
 .do_save_file
-   ;; --- SAVE FILE (BASIC program, BSAVE $6000, or OPENOUT stream) ---
+   ;; --- SAVE FILE (BASIC program, BSAVE $6000, COPY, or OPENOUT stream) ---
    ; Write "BBC!" + 16-byte filename + length into (sd_dir_ptr)
    LDY #$00
    LDA #'B': STA (sd_dir_ptr),Y: INY
@@ -791,6 +868,8 @@ endmacro
    LDA sd_action
    CMP #$02
    BEQ save_bin_len
+   CMP #$04
+   BEQ save_copy_len
    CMP #$80
    BNE save_basic_len
    ; Data file from FILE_BUF ($7A00): length = f_len, 1 sector
@@ -800,6 +879,18 @@ endmacro
    LDA #$00
    STA (sd_dir_ptr),Y        ; Offset 21 = len_hi
    LDA #$01
+   STA sd_num_sec
+   BNE write_dir_and_data
+
+.save_copy_len
+   LDA f_len
+   STA (sd_dir_ptr),Y        ; Offset 20 = len_lo
+   INY
+   LDA f_idx
+   STA (sd_dir_ptr),Y        ; Offset 21 = len_hi
+   LSR A
+   CLC
+   ADC #$01
    STA sd_num_sec
    BNE write_dir_and_data
 
@@ -839,6 +930,8 @@ endmacro
    LDA sd_action
    CMP #$02
    BEQ save_from_6000
+   CMP #$04
+   BEQ save_from_6000
    CMP #$80
    BNE save_from_page
    LDA #>FILE_BUF
@@ -873,6 +966,7 @@ endmacro
    STA f_len
    INY                       ; Offset 21 = len_hi
    LDA (sd_dir_ptr),Y
+   STA f_idx
    LSR A
    CLC
    ADC #$01
@@ -886,6 +980,7 @@ endmacro
    LDA #$01: STA sd_num_sec
    LDA #>FILE_BUF: STA sd_ptr+1
    JSR disk_read_sector
+   LDA #$00: STA f_idx
    LDA #$01                  ; Return channel handle #1 for OPENIN
    RTS
 
@@ -1028,7 +1123,9 @@ endmacro
    RTS
 
 ;; =============================================================
-;; OSCLI ($FFF7): *CAT, *WIPE, *RUN, *BRUN, *BLOAD, *BSAVE
+;; OSCLI ($FFF7):
+;;   *CAT, *INFO, *HELP, *WIPE, *DELETE, *RENAME, *COPY,
+;;   *TYPE, *DUMP, *DRIVE 0..3, *SD, *SDRAM, *RUN, *BLOAD, *BSAVE
 ;; =============================================================
 .nvoscli
    STX sd_ptr
@@ -1051,7 +1148,7 @@ endmacro
 .cli_not_w
    CMP #'R'
    BNE cli_not_r
-   JMP cli_brun
+   JMP cli_r_cmd
 .cli_not_r
    CMP #'B'
    BNE cli_not_b
@@ -1062,8 +1159,30 @@ endmacro
    JMP cli_s_cmd
 .cli_not_s
    CMP #'D'
+   BNE cli_not_d
+   JMP cli_d_cmd
+.cli_not_d
+   CMP #'I'
+   BNE cli_not_i
+   JMP cli_info
+.cli_not_i
+   CMP #'H'
+   BNE cli_not_h
+   JMP cli_help
+.cli_not_h
+   CMP #'T'
+   BNE cli_not_t
+   JMP cli_type
+.cli_not_t
+   CMP #'C'
    BNE cli_do_cat
-   JMP cli_drive
+   INY
+   LDA (sd_ptr),Y
+   AND #$DF
+   CMP #'O'
+   BNE cli_do_cat
+   JMP cli_copy
+
 .cli_do_cat
    ; Default: *CAT (Catalogue)
    JSR sd_init
@@ -1104,12 +1223,275 @@ endmacro
    BNE cat_slot_loop
    RTS
 
+;; *D... commands: *DRIVE, *DELETE (*DEL), *DUMP
+.cli_d_cmd
+   INY
+   LDA (sd_ptr),Y
+   AND #$DF
+   CMP #'E'
+   BEQ cli_delete
+   CMP #'U'
+   BNE cli_drive
+   JMP cli_dump
+.cli_delete
+   JSR cli_extract_fn
+   LDA #$FD
+   JMP osfile_from_buf
 .cli_drive
    JSR cli_extract_fn
    LDA $0600
    AND #$03
    STA f_drive
    JMP cli_do_cat
+
+;; *R... commands: *RUN, *RENAME (*REN)
+.cli_r_cmd
+   INY
+   LDA (sd_ptr),Y
+   AND #$DF
+   CMP #'E'
+   BEQ cli_rename
+   JMP cli_brun
+.cli_rename
+   JSR cli_extract_fn
+   LDX #$0F
+.ren_save_old
+   LDA $0600,X
+   STA f_name,X
+   DEX
+   BPL ren_save_old
+   LDY ZP_Y
+   JSR cli_skip_fsp
+   ; Swap f_name (<OUD>) and $0600 (<NIEUW>)
+   LDX #$0F
+.ren_swap
+   LDA $0600,X
+   PHA
+   LDA f_name,X
+   STA $0600,X
+   PLA
+   STA f_name,X
+   DEX
+   BPL ren_swap
+   LDA #$FC
+   JMP osfile_from_buf
+
+;; *COPY <NAAM> (tussen SD en 4 MB SDRAM-Disk!)
+.cli_copy
+   JSR cli_extract_fn
+   LDA #$FE
+   JSR osfile_from_buf
+   LDA f_sdram
+   EOR #$80
+   STA f_sdram
+   LDA #$04
+   JSR osfile_from_buf
+   LDA f_sdram
+   EOR #$80
+   STA f_sdram
+   LDA #$00
+   STA f_idx
+   RTS
+
+;; *TYPE <NAAM> (toon inhoud van bestand op scherm)
+.cli_type
+   JSR cli_extract_fn
+   LDA #$40
+   JSR osfile_from_buf
+   CMP #$00
+   BNE type_ok
+   JMP load_not_found
+.type_ok
+   LDA FILE_BUF
+   BNE type_raw
+   LDX FILE_BUF+1
+   BEQ type_done
+.type_bbc_loop
+   LDA FILE_BUF+1,X
+   JSR OSASCI
+   DEX
+   BNE type_bbc_loop
+   BEQ type_done
+.type_raw
+   LDX #$00
+.type_loop
+   CPX f_len
+   BEQ type_done
+   LDA FILE_BUF,X
+   JSR OSASCI
+   INX
+   BNE type_loop
+.type_done
+   JMP OSNEWL
+
+;; *INFO [NAAM] (toon slot, bestandsnaam en exacte lengte in HEX)
+.cli_info
+   JSR cli_extract_fn
+   JSR sd_init
+   JSR setup_dir_sec
+   JSR disk_read_sector
+   JSR print_storage_tag
+   LDX #$00
+.pr_inf_h
+   LDA msg_cat_hdr,X
+   BEQ pr_inf_h_done
+   JSR OSASCI
+   INX
+   BNE pr_inf_h
+.pr_inf_h_done
+   LDA #$00: STA sd_slot
+.info_slot_loop
+   JSR calc_dir_ptr
+   JSR check_entry_magic
+   BNE info_next_slot
+   LDA $0600
+   BEQ info_match
+   CMP #'*'
+   BEQ info_match
+   JSR match_entry_name
+   BNE info_next_slot
+.info_match
+   LDA #' ': JSR OSASCI
+   LDA #'#': JSR OSASCI
+   LDA sd_slot: JSR pr_hex_byte
+   LDA #' ': JSR OSASCI
+   LDY #$04
+.info_fn_loop
+   CPY #$14
+   BEQ info_fn_done
+   LDA (sd_dir_ptr),Y
+   BNE info_ch_ok
+   LDA #' '
+.info_ch_ok
+   JSR OSASCI
+   INY
+   BNE info_fn_loop
+.info_fn_done
+   LDA #'$': JSR OSASCI
+   LDY #$15: LDA (sd_dir_ptr),Y: JSR pr_hex_byte
+   DEY:      LDA (sd_dir_ptr),Y: JSR pr_hex_byte
+   LDA #' ': JSR OSASCI
+   LDA #'B': JSR OSASCI
+   JSR OSNEWL
+.info_next_slot
+   INC sd_slot
+   LDA sd_slot
+   CMP #$0F
+   BNE info_slot_loop
+   RTS
+
+;; *DUMP [HEX-ADRES] (toon 64 bytes in HEX + ASCII, standaard $6000)
+.cli_dump
+   JSR cli_extract_fn
+   LDA #$00
+   STA sd_dir_ptr
+   STA sd_dir_ptr+1
+   LDA $0600
+   BNE dump_parse_start
+   LDA #$60
+   STA sd_dir_ptr+1
+   BNE dump_go
+.dump_parse_start
+   LDX #$00
+.dump_parse_loop
+   LDA $0600,X
+   BEQ dump_go
+   SEC
+   SBC #'0'
+   BCC dump_go
+   CMP #$0A
+   BCC dump_nib_ok
+   SBC #$07
+   CMP #$10
+   BCS dump_go
+.dump_nib_ok
+   ASL A: ASL A: ASL A: ASL A
+   LDY #$04
+.dump_sh_loop
+   ASL A
+   ROL sd_dir_ptr
+   ROL sd_dir_ptr+1
+   DEY
+   BNE dump_sh_loop
+   INX
+   CPX #$04
+   BNE dump_parse_loop
+.dump_go
+   LDA #$08
+   STA sd_slot
+.dump_row_loop
+   LDA sd_dir_ptr+1: JSR pr_hex_byte
+   LDA sd_dir_ptr:   JSR pr_hex_byte
+   LDA #':': JSR OSASCI
+   LDA #' ': JSR OSASCI
+   LDY #$00
+.dump_hex_loop
+   LDA (sd_dir_ptr),Y
+   JSR pr_hex_byte
+   LDA #' ': JSR OSASCI
+   INY
+   CPY #$08
+   BNE dump_hex_loop
+   LDA #' ': JSR OSASCI
+   LDY #$00
+.dump_asc_loop
+   LDA (sd_dir_ptr),Y
+   CMP #$20
+   BCC dump_dot
+   CMP #$7F
+   BCC dump_ch_out
+.dump_dot
+   LDA #'.'
+.dump_ch_out
+   JSR OSASCI
+   INY
+   CPY #$08
+   BNE dump_asc_loop
+   JSR OSNEWL
+   LDA sd_dir_ptr
+   CLC
+   ADC #$08
+   STA sd_dir_ptr
+   BCC dump_no_inc
+   INC sd_dir_ptr+1
+.dump_no_inc
+   DEC sd_slot
+   BNE dump_row_loop
+   RTS
+
+;; *HELP (toon overzicht van alle ingebouwde SD-MOS commando's)
+.cli_help
+   LDX #$00
+.help_lp1
+   LDA msg_help1,X
+   BEQ help_pt2
+   JSR OSASCI
+   INX
+   BNE help_lp1
+.help_pt2
+   LDX #$00
+.help_lp2
+   LDA msg_help2,X
+   BEQ help_done
+   JSR OSASCI
+   INX
+   BNE help_lp2
+.help_done
+   RTS
+
+.msg_help1
+   EQUS "=== SBC02 SD-MOS 1.20 COMMANDO'S ===", $0D
+   EQUS "  *CAT / *INFO [NAAM]  Catalogus & Grootte", $0D
+   EQUS "  *DRIVE 0..3          Kies Floppy Drive 0-3", $0D
+   EQUS "  *SD / *SDRAM         MicroSD of 4MB SDRAM", $0D
+   EQUS "  *RUN / *BLOAD / *BSAVE <NAAM> ($6000 ASM)", $0D, 0
+.msg_help2
+   EQUS "  *COPY <NAAM>         Kopieer SD <-> SDRAM", $0D
+   EQUS "  *DELETE <NAAM>       Wis 1 bestand", $0D
+   EQUS "  *RENAME <OUD> <NW>   Hernoem bestand", $0D
+   EQUS "  *TYPE <NAAM>         Toon tekstbestand", $0D
+   EQUS "  *DUMP [HEX]          Hex+ASCII dump", $0D
+   EQUS "  *WIPE                Formatteer drive", $0D, 0
 
 .cli_s_cmd
    ; *SDRAM or *SD: check 3rd letter (after 'S','D')
@@ -1188,6 +1570,7 @@ endmacro
    CPX #$10
    BNE cli_fn_copy
 .cli_fn_done
+   STY ZP_Y
    LDA #$0D
    STA $0600,X
    JMP norm_filename

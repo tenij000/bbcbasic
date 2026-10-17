@@ -93,11 +93,19 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 ```basic
 SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op
 LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
+*HELP                            : REM Toon overzicht van alle ingebouwde SD-MOS 1.20 commando's
 *CAT                             : REM Toon de catalogus (inhoudsopgave)
+*INFO                            : REM Toon slotnummer (#00..#0E), naam en exacte grootte in HEX ($XXXX B)
+*INFO EXCEL                      : REM Toon bestandsinformatie voor één specifiek bestand
 *DRIVE 0                         : REM Kies virtuele Floppy Drive 0 t/m 3 (4 x 15 bestanden op SD én SDRAM!)
-*WIPE                            : REM Formatteer de huidige drive-catalogus
 *SDRAM                           : REM Schakel over naar de interne 4 MB SDRAM-Disk (74,25 MHz!)
 *SD                              : REM Schakel terug naar de MicroSD-kaart
+*COPY EXCEL                      : REM Kopieer een bestand rechtstreeks tussen MicroSD en 4 MB SDRAM-Disk!
+*RENAME OUD NIEUW                : REM Hernoem een bestand in de catalogus
+*DELETE MIJNPROG                 : REM Wis één specifiek bestand uit de catalogus (zonder de rest te wissen)
+*TYPE NAAM.DAT                   : REM Toon de tekst-inhoud van een bestand op het scherm
+*DUMP B000                       : REM Toon een 64-byte Hex + ASCII geheugendump vanaf een HEX-adres
+*WIPE                            : REM Formatteer de volledige catalogus van de huidige drive
 *RUN EXCEL                       : REM Start VisiCalc / Mini-Excel 6502 (pure 6502 machinetaal op $6000)!
 *RUN MATRIX                      : REM Start de 6502 Radar & Laser demo vanaf SD-kaart
 *BLOAD EXCEL                     : REM Laad puur 6502 machinetaal-bestand naar $6000 (zonder te starten)
