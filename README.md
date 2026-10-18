@@ -16,8 +16,10 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
     * `RECT X, Y, BREEDTE, HOOGTE` (Hardware gevulde rechthoeken)
     * `CIRCLE X, Y, STRAAL` (Midpoint hardware cirkel-engine)
     * `GCOL 0, KLEUR` & `CLG` (8-bit RGB332 / BBC BASIC kleurenpalet)
-* **👾 16 Hardware Sprites (16×16, 2× geschaald naar 32×32 pixels):**
-  * Onafhankelijke transparante sprite-overlay bovenop de tekst- en framebuffer-laag.
+* **👾 16 Multi-Color Hardware Sprites (`16×16` Scouts, `32×32` Fighters & `64×64` Mega-Boss!):**
+  * Onafhankelijke transparante sprite-overlay bovenop de tekst- en framebuffer-laag over het **volledige `1280×1024` (720p HDMI) scherm**.
+  * **15-Kleuren Neon Arcade Palet & Schaling per Sprite (`$A029` `SPR_ATTR`):** Kies per sprite een eigen neon-kleur (`bits 3..0`) én formaat (`bits 5..4`: `00`=`32×32` standaard, `01`=`16×16` snelle Scout, `10/11`=`64×64` Mega-Boss!).
+  * **Hardware Sprite-tot-Sprite Botsingsdetectie & Biljart-Physics (`$A027` & `$A028`):** Wanneer twee sprites elkaar raken op het scherm, draaien ze in hardware automatisch om (biljart-botsing!), telt `$A028` (`SPR_BOUNCES`) elke botsing en meldt `$A027` (`SPR_COLL`) direct welke vijand Sprite 0 (de speler) heeft geraakt!
   * Live te bewerken en te testen met de meegeleverde **Retro FPGA Sprite Studio PRO** (`sprite_editor.py`).
 * **📺 80×41 Kleuren Tekst-Terminal met Jaren '70 CRT Hardware-Scrolling:**
   * 8×8 font (2× geschaald naar 16×16 pixels op 1280×720p HDMI).
@@ -26,7 +28,7 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
   * **MicroSD-kaart (SPI Master op `$A010-$A011`):** Ondersteunt SDHC/SDXC-kaarten met een ingebouwd **SuperFloppy Catalogus-bestandssysteem** (32 bestandsslots van elk 32 KB = 1 MB directe retro-opslag).
   * **4 MB Interne SDRAM-Disk & RAM-Expansie (`$A012-$A015`):** Gebruikt de bovenste 4 Megabyte van het 64 Mbit SDRAM (op 74,25 MHz!) als razendsnelle interne RAM-disk (met volledige 32 KB per bestandsslot) én als 4 MB RAM-expansie voor de 6502, waarmee **8 FPGA BSRAM-blokken** zijn vrijgespeeld!
   * **Volledige BBC BASIC & 6502 Machinetaal bestandscommando's:**
-    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `*CAT`, `*WIPE`, `*SDRAM`, `*SD`
+    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `CHAIN "NAAM"`, `*CAT`, `*INFO`, `*WIPE`, `*SDRAM`, `*SD`
     * Pure 6502 Machinetaal (`$6000`): `*RUN <NAAM>`, `*BRUN <NAAM>`, `*BLOAD <NAAM>`, `*BSAVE <NAAM>`
     * Databestanden (Random Access / Streams): `OPENOUT`, `OPENIN`, `OPENUP`, `PRINT#`, `INPUT#`, `BPUT#`, `BGET#`, `EOF#`, `PTR#`, `EXT#`, `CLOSE#`.
 * **⌨️ Zelfstandig werken met PS/2-Toetsenbord + PC-Terminal:**
@@ -40,7 +42,7 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | :--- | :--- | :--- |
 | **`$0000 - $00FF`** | 256 B | **Zero Page** (BBC BASIC II + SD-MOS variabelen `$E0-$EF`) |
 | **`$0100 - $01FF`** | 256 B | **6502 Hardware Stack** |
-| **`$0200 - $07FF`** | 1,5 KB | **MOS & BBC BASIC Systeemwerkruimte** |
+| **`$0200 - $07FF`** | 1,5 KB | **MOS & BBC BASIC Systeemwerkruimte** (`$02D0-$02DF` = Sprite Physics, `$02F5` = `BG_MODE`, `$02F6-$02F7` = `USR_BGV`) |
 | **`$0800 - $5FFF`** | **22 KB** | **BBC BASIC Programma-geheugen (`PAGE = $0800`)** |
 | **`$6000 - $79FF`** | **6,5 KB** | **Pure 6502 Machinetaal / Binary werkgebied (`*RUN`, `*BLOAD`, `*BSAVE`)** |
 | **`$7A00 - $7BFF`** | 512 B | **`FILE_BUF`**: Stream-buffer voor `OPENIN` / `OPENOUT` (`PRINT#` / `INPUT#`) |
@@ -52,6 +54,7 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | **`$A010 - $A011`** | 2 B | **MicroSD Hardware SPI Controller**: Data (`$A010`), CS & Kloksnelheid (`$A011`) |
 | **`$A012 - $A015`** | 4 B | **4 MB Interne SDRAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`), Bank 0..63 (`$A015`) |
 | **`$A020 - $A026`** | 7 B | **Directe Hardware Sprite & Physics Registers**: `SPR_SEL` (`$A020`), `X/Y` (`$A021-$A024`), `ACT` (`$A025`), `SPR_STEP` (`$A026`) |
+| **`$A027 - $A029`** | 3 B | **Sprite Collision & Attribute Registers**: `SPR_COLL` (`$A027` Speler-hit), `SPR_BOUNCES` (`$A028` Botsingsteller), `SPR_ATTR` (`$A029` Schaal & 15 Neon-kleuren) |
 | **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.30 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
 | **`$C000 - $FFFF`** | **16 KB** | **Acorn BBC BASIC II ROM + MOS Vectoren** (`Basic2.asm` + `SBC_MOS.asm`) |
 
@@ -107,7 +110,7 @@ LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
 *DELETE MIJNPROG                 : REM Wis één specifiek bestand uit de catalogus (zonder de rest te wissen)
 *TYPE README.TXT                 : REM Toon de tekst-inhoud van een bestand op het scherm
 *DUMP B000                       : REM Toon een 64-byte Hex + ASCII geheugendump vanaf een HEX-adres
-*BG ON                           : REM Start 16 Hardware Sprites op de achtergrond via 100 Hz IRQ Multitasking!
+*BG ON                           : REM Start 16 Multi-Color Hardware Sprites + 64x64 Boss via 100 Hz IRQ Multitasking!
 *BG OFF                          : REM Stop achtergrond-sprites en verberg ze
 *WIPE                            : REM Formatteer de volledige catalogus van de huidige drive
 *RUN EXCEL                       : REM Start VisiCalc / Mini-Excel 6502 (pure 6502 machinetaal op $6000)!
@@ -131,6 +134,17 @@ Schakel naar Drive 1 met `*DRIVE 1` en start direct een van de **10 klassieke 65
 | **`*RUN EXCEL`** | `visicalc6502.asm` | 1979 | **VisiCalc / Mini-Excel 6502 Spreadsheet** (live rij-, kolom- en totaalsommen) |
 | **`*RUN MATRIX`** | `matrix6502.asm` | 1982 | **6502 Radar & Laser Vector Demo** op de 720p HDMI MiniGPU |
 
+#### 🎆 Fullscreen BBC BASIC + Multitasking Showcase op Virtuele Floppy Drive 2 (`*DRIVE 2`)
+Schakel naar Drive 2 met `*DRIVE 2` en start direct een van de **6 fullscreen (`1280×1024`) BBC BASIC + MiniGPU + 100 Hz IRQ demo's**:
+| Commando | Beschrijving |
+| :--- | :--- |
+| **`CHAIN "ALIENWAR"`** | **Hardware Collision & 64×64 Boss Demo**: volgt live de `64×64` Rode Mega-Boss (`Sprite 15`), telt live alien-botsingen (`$A028`) en detecteert hits op de speler (`$A027`)! |
+| **`CHAIN "MULTITASK"`** | **100 Hz IRQ Multitasking Showcase**: draait 3 taken tegelijk (16 Multi-Color Sprites + 100 Hz 6502 teller op `$0900` + 3D MiniGPU Tunnel). |
+| **`CHAIN "VUURWERK"`** | **Fullscreen MiniGPU + 16 Sprites Vuurwerk**: kleurrijke vuurwerk-explosies over het hele `1280×1024` scherm terwijl de 16 aliens botsen. |
+| **`CHAIN "SYNTHBG"`** | **1984 Synthwave Horizon + Boss Alien**: 80s neon-zon en 3D-perspectiefgrid met 16 turbo-aliens + `64×64` Mega-Boss. |
+| **`CHAIN "KLOK"`** | **Fullscreen 100 Hz Hardware Klok & Radar**: 16-staps radar-sweep aangedreven door de `TIME`-klok (`$A003`). |
+| **`CHAIN "BENCHMARK"`** | **27 MHz 6502 vs 1981 BBC Micro Benchmark**: meet BASIC-, 6502 machinetaal- en MiniGPU-snelheid (~15× sneller dan een BBC Micro). |
+
 
 ### 3. Databestanden Lezen & Schrijven (`OPENOUT` / `OPENIN` / `CLOSE#`)
 ```basic
@@ -144,24 +158,28 @@ Schakel naar Drive 1 met `*DRIVE 1` en start direct een van de **10 klassieke 65
 80 PRINT TEKST$, GETAL%
 ```
 
-### 4. Hardware Sprites aansturen (`PLOT 200..203` & Directe Registers `$A020..$A026`)
+### 4. Hardware Sprites, Kleuren, Schaling & Botsingsdetectie (`PLOT 200..203` & `$A020..$A029`)
 ```basic
 PLOT 200, 0, 0                   : REM Selecteer Sprite ID 0 (0 t/m 15)
 PLOT 201, 1, 0                   : REM Zet Sprite 0 AAN (1 = zichtbaar, 0 = verborgen)
-PLOT 202, 640, 360               : REM Zet Sprite 0 op schermpositie X=640, Y=360
+PLOT 202, 640, 512               : REM Zet Sprite 0 op schermpositie X=640, Y=512 (midden van 1280x1024)
 PLOT 203, ADRES, KLEUR           : REM Schrijf pixelkleur naar sprite-geheugen (0..255)
+?&A020 = 15 : ?&A029 = &21       : REM Maak Sprite 15 een 64x64 Rode Mega-Boss (Scale=2, Kleur=1)
+?&A020 = 0  : ?&A029 = &16       : REM Maak Sprite 0 een 16x16 Cyaan Mini-Scout (Scale=1, Kleur=6)
+PRINT "Totaal botsingen: "; ?&A028 : REM Lees de hardware alien-tot-alien botsingsteller ($A028)
+PRINT "Speler geraakt:   "; ?&A027 : REM Bit 7=1 als Sprite 0 geraakt is, bits 3..0 = vijand-ID!
 ```
 
 ### 5. ⚡ BBC Micro-stijl 100 Hz Hardware Interrupt Multitasking (`*BG ON`, `TIME` & `USR_BGV`)
-Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped sprite-registers (`$A020-$A026`) ondersteunt **SBC02 SD-MOS 1.30** echte hardware interrupt multitasking:
+Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped sprite-registers (`$A020-$A029`) ondersteunt **SBC02 SD-MOS 1.30** echte hardware interrupt multitasking:
 * **Echte 100 Hz `TIME` Systeemklok (in centiseconden):**
   ```basic
   TIME = 0
   FOR I = 1 TO 10000 : NEXT
   PRINT "Verstreken tijd: "; TIME; " centiseconden"
   ```
-* **16 Hardware Sprites op de Achtergrond (`*BG ON` / `*BG OFF`):**
-  Typ `*BG ON` om alle 16 Hardware Sprites gelijktijdig met 50/100 Hz over het scherm te laten stuiteren vanuit de 6502 IRQ-handler, terwijl je op de voorgrond gewoon in BBC BASIC typt, `LIST` of `*CAT` uitvoert, of programma's draait!
+* **16 Multi-Color Hardware Sprites + 64×64 Boss op de Achtergrond (`*BG ON` / `*BG OFF`):**
+  Typ `*BG ON` om alle 16 Hardware Sprites (`0..2` = `16×16` Scouts, `3..14` = `32×32` Fighters, `15` = `64×64` Rode Mega-Boss) gelijktijdig met 50/100 Hz over het volledige scherm te laten vliegen én tegen elkaar te laten biljart-botsen vanuit de 6502 IRQ-handler, terwijl je op de voorgrond gewoon in BBC BASIC typt of programma's draait!
   * Snelheid en richting van elke sprite (`0..15`) staan live in 6502 RAM op `$02D0..$02DF` (`bit 7`=X-richting, `bit 6`=Y-richting, `bits 5..3`=dX, `bits 2..0`=dY).
 * **Eigen 6502 Achtergrondtaak koppelen (`USR_BGV` op `$02F6-$02F7`):**
   ```basic

@@ -245,12 +245,15 @@ module top(
         end
     end
 
-    // --- Direct Memory-Mapped Hardware Sprite Registers ($A020 - $A026) ---
+    // --- Direct Memory-Mapped Hardware Sprite Registers ($A020 - $A029) ---
     reg [3:0]  spr_sel = 0;
     reg [7:0]  spr_dir_out = 0;
+    reg [7:0]  sp0_coll_reg = 0;
+    reg [7:0]  sp_bounce_cnt = 0;
     reg [11:0] sprite_x_reg [0:15];
     reg [11:0] sprite_y_reg [0:15];
     reg        sprite_active_reg [0:15];
+    reg [7:0]  sprite_attr_reg [0:15];
     
     always @(posedge sys_clk) begin
         rd_ack_sync <= {rd_ack_sync[1:0], rd_ack_toggle};
@@ -349,6 +352,12 @@ module top(
                 cpu_di <= {7'b0000000, sprite_active_reg[spr_sel]};
             end else if (cpu_ab == 16'hA026) begin
                 cpu_di <= spr_dir_out;
+            end else if (cpu_ab == 16'hA027) begin
+                cpu_di <= sp0_coll_reg;
+            end else if (cpu_ab == 16'hA028) begin
+                cpu_di <= sp_bounce_cnt;
+            end else if (cpu_ab == 16'hA029) begin
+                cpu_di <= sprite_attr_reg[spr_sel];
             end else if (cpu_ab >= 16'hB000 && cpu_ab < 16'hC000) begin
                 cpu_di <= mos_rom[cpu_ab[11:0]]; // B000-BFFF is 4KB Extended MOS ROM
             end else if (cpu_ab >= 16'hC000) begin
@@ -501,23 +510,68 @@ module top(
         .term_busy(term_busy)
     );
     
-    // --- Hardware Sprite Rendering (16 Sprites) ---
+    // --- Hardware Sprite Rendering & Collision Physics (16 Sprites) ---
     wire [11:0] cur_sp_x = sprite_x_reg[spr_sel];
     wire [11:0] cur_sp_y = sprite_y_reg[spr_sel];
     wire [11:0] step_dx  = {8'd0, cpu_do[5:3], 1'b0};
     wire [11:0] step_dy  = {8'd0, cpu_do[2:0], 1'b0};
 
+    // Combinational Sprite-to-Sprite Collision Detector for spr_sel
+    reg       sp_peer_hit;
+    reg [3:0] sp_peer_id;
+    reg       sp_peer_left;
+    reg       sp_peer_below;
+    integer   k_idx;
+
+    always @(*) begin
+        sp_peer_hit   = 1'b0;
+        sp_peer_id    = 4'd0;
+        sp_peer_left  = 1'b0;
+        sp_peer_below = 1'b0;
+        for (k_idx = 0; k_idx < 16; k_idx = k_idx + 1) begin
+            if ((k_idx[3:0] != spr_sel) && sprite_active_reg[k_idx[3:0]] && sprite_active_reg[spr_sel]) begin
+                if ((cur_sp_x + 12'd32 > sprite_x_reg[k_idx[3:0]]) &&
+                    (sprite_x_reg[k_idx[3:0]] + 12'd32 > cur_sp_x) &&
+                    (cur_sp_y + 12'd42 > sprite_y_reg[k_idx[3:0]]) &&
+                    (sprite_y_reg[k_idx[3:0]] + 12'd42 > cur_sp_y)) begin
+                    sp_peer_hit   = 1'b1;
+                    sp_peer_id    = k_idx[3:0];
+                    sp_peer_left  = (cur_sp_x < sprite_x_reg[k_idx[3:0]]);
+                    sp_peer_below = (cur_sp_y < sprite_y_reg[k_idx[3:0]]);
+                end
+            end
+        end
+    end
+
+    wire eff_dir_x = sp_peer_hit ? sp_peer_left  : cpu_do[7];
+    wire eff_dir_y = sp_peer_hit ? sp_peer_below : cpu_do[6];
+
     integer i;
     always @(posedge sys_clk) begin
         if (reset) begin
-            spr_sel     <= 0;
-            spr_dir_out <= 0;
+            spr_sel       <= 0;
+            spr_dir_out   <= 0;
+            sp0_coll_reg  <= 0;
+            sp_bounce_cnt <= 0;
             for (i = 0; i < 16; i = i + 1) begin
-                sprite_x_reg[i] <= 0;
-                sprite_y_reg[i] <= 0;
+                sprite_x_reg[i]      <= 0;
+                sprite_y_reg[i]      <= 0;
                 sprite_active_reg[i] <= 0;
+                sprite_attr_reg[i]   <= 0;
             end
         end else begin
+            // Clear Sprite 0 collision latch on CPU read of $A027
+            if (cpu_rdy && !cpu_we && cpu_ab == 16'hA027) begin
+                sp0_coll_reg <= 0;
+            end
+            // Latch any collision involving Sprite 0 (Player)
+            if (sp_peer_hit) begin
+                if (spr_sel == 4'd0)
+                    sp0_coll_reg <= {1'b1, 3'b000, sp_peer_id};
+                else if (sp_peer_id == 4'd0)
+                    sp0_coll_reg <= {1'b1, 3'b000, spr_sel};
+            end
+
             if (sprite_pos_we) begin
                 sprite_x_reg[sprite_id] <= sprite_x_out;
                 sprite_y_reg[sprite_id] <= sprite_y_out;
@@ -535,43 +589,52 @@ module top(
                     16'hA025: sprite_active_reg[spr_sel]  <= cpu_do[0];
                     16'hA026: begin
                         spr_dir_out[5:0] <= cpu_do[5:0];
-                        // Step X with full 1280p screen boundary bounce (0..1248)
-                        if (!cpu_do[7]) begin
-                            if (cur_sp_x + step_dx >= 12'd1248) begin
-                                sprite_x_reg[spr_sel] <= 12'd1248;
-                                spr_dir_out[7]        <= 1'b1;
-                            end else begin
-                                sprite_x_reg[spr_sel] <= cur_sp_x + step_dx;
-                                spr_dir_out[7]        <= 1'b0;
-                            end
+                        if (cpu_do[5:0] == 6'd0) begin
+                            spr_dir_out[7:6] <= cpu_do[7:6];
                         end else begin
-                            if (cur_sp_x <= step_dx) begin
-                                sprite_x_reg[spr_sel] <= 12'd0;
-                                spr_dir_out[7]        <= 1'b0;
+                            if (sp_peer_hit)
+                                sp_bounce_cnt <= sp_bounce_cnt + 8'd1;
+                            // Step X with full 1280p screen & sprite-to-sprite bounce (0..1248)
+                            if (!eff_dir_x) begin
+                                if (cur_sp_x + step_dx >= 12'd1248) begin
+                                    sprite_x_reg[spr_sel] <= 12'd1248;
+                                    spr_dir_out[7]        <= 1'b1;
+                                end else begin
+                                    sprite_x_reg[spr_sel] <= cur_sp_x + step_dx;
+                                    spr_dir_out[7]        <= 1'b0;
+                                end
                             end else begin
-                                sprite_x_reg[spr_sel] <= cur_sp_x - step_dx;
-                                spr_dir_out[7]        <= 1'b1;
+                                if (cur_sp_x <= step_dx) begin
+                                    sprite_x_reg[spr_sel] <= 12'd0;
+                                    spr_dir_out[7]        <= 1'b0;
+                                end else begin
+                                    sprite_x_reg[spr_sel] <= cur_sp_x - step_dx;
+                                    spr_dir_out[7]        <= 1'b1;
+                                end
                             end
-                        end
-                        // Step Y with full 1024 BBC BASIC screen boundary bounce (46..1020)
-                        if (!cpu_do[6]) begin
-                            if (cur_sp_y + step_dy >= 12'd1020) begin
-                                sprite_y_reg[spr_sel] <= 12'd1020;
-                                spr_dir_out[6]        <= 1'b1;
+                            // Step Y with full 1024 BBC BASIC screen & sprite-to-sprite bounce (46..1020)
+                            if (!eff_dir_y) begin
+                                if (cur_sp_y + step_dy >= 12'd1020) begin
+                                    sprite_y_reg[spr_sel] <= 12'd1020;
+                                    spr_dir_out[6]        <= 1'b1;
+                                end else begin
+                                    sprite_y_reg[spr_sel] <= cur_sp_y + step_dy;
+                                    spr_dir_out[6]        <= 1'b0;
+                                end
                             end else begin
-                                sprite_y_reg[spr_sel] <= cur_sp_y + step_dy;
-                                spr_dir_out[6]        <= 1'b0;
-                            end
-                        end else begin
-                            if (cur_sp_y <= 12'd46 + step_dy) begin
-                                sprite_y_reg[spr_sel] <= 12'd46;
-                                spr_dir_out[6]        <= 1'b0;
-                            end else begin
-                                sprite_y_reg[spr_sel] <= cur_sp_y - step_dy;
-                                spr_dir_out[6]        <= 1'b1;
+                                if (cur_sp_y <= 12'd46 + step_dy) begin
+                                    sprite_y_reg[spr_sel] <= 12'd46;
+                                    spr_dir_out[6]        <= 1'b0;
+                                end else begin
+                                    sprite_y_reg[spr_sel] <= cur_sp_y - step_dy;
+                                    spr_dir_out[6]        <= 1'b1;
+                                end
                             end
                         end
                     end
+                    16'hA027: sp0_coll_reg  <= 8'd0;
+                    16'hA028: sp_bounce_cnt <= cpu_do;
+                    16'hA029: sprite_attr_reg[spr_sel] <= cpu_do;
                 endcase
             end
         end
@@ -595,17 +658,28 @@ module top(
             end
             
             wire [11:0] hdmi_sp_x = sprite_x_reg[g];
-            wire [17:0] sy_mult = sprite_y_reg[g] * 45;
+            wire [17:0] sy_mult   = sprite_y_reg[g] * 45;
             wire [11:0] hdmi_sp_y = 719 - (sy_mult >> 6);
             
-            wire in_x = (cx >= hdmi_sp_x) && (cx < hdmi_sp_x + 32);
-            wire in_y = (cy >= hdmi_sp_y) && (cy < hdmi_sp_y + 32);
+            // Scale selector: 00 = 32x32 (2x), 01 = 16x16 (1x Scout), 10/11 = 64x64 (4x Boss)
+            wire [1:0]  sp_scale  = sprite_attr_reg[g][5:4];
+            wire [6:0]  sp_size   = (sp_scale == 2'b01) ? 7'd16 :
+                                    (sp_scale[1])       ? 7'd64 : 7'd32;
+            wire [11:0] dx_sp     = cx - hdmi_sp_x;
+            wire [11:0] dy_sp     = cy - hdmi_sp_y;
+            wire        in_x      = (cx >= hdmi_sp_x) && (dx_sp < {5'd0, sp_size});
+            wire        in_y      = (cy >= hdmi_sp_y) && (dy_sp < {5'd0, sp_size});
             
-            wire [3:0] sp_x_idx = (cx - hdmi_sp_x) >> 1;
-            wire [3:0] sp_y_idx = (cy - hdmi_sp_y) >> 1;
-            wire [7:0] sp_addr = {sp_y_idx, sp_x_idx};
+            wire [3:0]  sp_x_idx  = (sp_scale == 2'b01) ? dx_sp[3:0] :
+                                    (sp_scale[1])       ? dx_sp[5:2] : dx_sp[4:1];
+            wire [3:0]  sp_y_idx  = (sp_scale == 2'b01) ? dy_sp[3:0] :
+                                    (sp_scale[1])       ? dy_sp[5:2] : dy_sp[4:1];
+            wire [7:0]  sp_addr   = {sp_y_idx, sp_x_idx};
+            wire [7:0]  raw_px    = ram[sp_addr];
+            wire [3:0]  attr_col  = sprite_attr_reg[g][3:0];
             
-            assign sp_color[g] = (sprite_active_reg[g] && in_x && in_y) ? ram[sp_addr] : 8'h00;
+            assign sp_color[g] = (sprite_active_reg[g] && in_x && in_y && (raw_px != 8'h00)) ?
+                                 ((attr_col != 4'd0) ? {4'd0, attr_col} : raw_px) : 8'h00;
         end
     endgenerate
     
@@ -629,18 +703,26 @@ module top(
                             
     wire sprite_visible = (final_sp_color != 8'h00);
     
+    // 15-Color Vibrant Neon Arcade Sprite Palette
     reg [23:0] sp_rgb;
     always @(*) begin
-        case (final_sp_color & 7)
-            0: sp_rgb = 24'h000000;
-            1: sp_rgb = 24'hFF0000;
-            2: sp_rgb = 24'h00FF00;
-            3: sp_rgb = 24'hFFFF00;
-            4: sp_rgb = 24'h0000FF;
-            5: sp_rgb = 24'hFF00FF;
-            6: sp_rgb = 24'h00FFFF;
-            7: sp_rgb = 24'hFFFFFF;
-            default: sp_rgb = 24'hFFFFFF;
+        case (final_sp_color[3:0])
+            4'd0:  sp_rgb = 24'h000000;
+            4'd1:  sp_rgb = 24'hFF2020; // 1: Arcade Red
+            4'd2:  sp_rgb = 24'h00FF40; // 2: Invader Green
+            4'd3:  sp_rgb = 24'hFFFF00; // 3: Laser Yellow
+            4'd4:  sp_rgb = 24'h2080FF; // 4: Electric Blue
+            4'd5:  sp_rgb = 24'hFF00FF; // 5: Neon Magenta
+            4'd6:  sp_rgb = 24'h00FFFF; // 6: Cyber Cyan
+            4'd7:  sp_rgb = 24'hFFFFFF; // 7: Pure White
+            4'd8:  sp_rgb = 24'hFF8000; // 8: Blaze Orange
+            4'd9:  sp_rgb = 24'hFF1493; // 9: Hot Pink
+            4'd10: sp_rgb = 24'h80FF00; // 10: Acid Lime
+            4'd11: sp_rgb = 24'h00FFAA; // 11: Aquamarine
+            4'd12: sp_rgb = 24'hA040FF; // 12: Plasma Purple
+            4'd13: sp_rgb = 24'hFFD700; // 13: Royal Gold
+            4'd14: sp_rgb = 24'hFF6060; // 14: Coral Crimson
+            4'd15: sp_rgb = 24'h40E0D0; // 15: Turquoise
         endcase
     end
     

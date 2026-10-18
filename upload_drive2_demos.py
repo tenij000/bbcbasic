@@ -1,9 +1,25 @@
 import serial
 import time
 
-# 5 Volledig Scherm (1280x1024 BBC BASIC / 720p HDMI) Showcase Demo's + README2.TXT voor Drive 2 (*DRIVE 2)
+# 6 Volledig Scherm (1280x1024 BBC BASIC / 720p HDMI) Showcase Demo's + README2.TXT voor Drive 2 (*DRIVE 2)
 
 DEMOS = {
+    "ALIENWAR": [
+        '10 CLS:CLG:*BG ON:?&A028=0:?&A027=0',
+        '20 FOR K%=0 TO 15:?(&2D0+K%)=((K% AND 1)*192)+54:NEXT',
+        '30 COLOUR 3:PRINT "=== ALIEN WAR: COLLISION & BOSS DEMO ==="',
+        '40 COLOUR 6:PRINT "Sprite 15 = 64x64 Rode Mega-Boss ($A029=$21)"',
+        '50 PRINT "Sprite 0..2 = 16x16 Snelle Scouts | 15 Neon Kleuren!"',
+        '60 GCOL 0,28:CIRCLE 640,512,90:CIRCLE 640,512,350',
+        '70 FOR T%=1 TO 10:FOR D%=1 TO 2500:NEXT',
+        '80 C%=?&A027:B%=?&A028',
+        '90 ?&A020=15:BX%=?&A021+(?&A022*256):BY%=?&A023+(?&A024*256)',
+        '100 GCOL 0,(T%*29) OR 3:GLINE 640,512,BX%,BY%:CIRCLE BX%,BY%,36',
+        '110 COLOUR (T% AND 6)+1',
+        '120 PRINT "Sweep ";T%;"/10 | Botsingen ($A028)=";B%;" | Boss=(";BX%;",";BY%;")"',
+        '130 IF C% THEN COLOUR 1:PRINT "  >>> HIT OP SPELER DOOR ALIEN #";C% AND 15;"! <<<":?&A027=0',
+        '140 NEXT:COLOUR 2:PRINT "Totaal Alien-Botsingen: ";?&A028',
+    ],
     "BENCHMARK": [
         '10 CLS:CLG:COLOUR 3:PRINT "=== 27 MHz 6502 vs 1981 BBC MICRO ==="',
         '20 COLOUR 7:PRINT "1. BASIC Loop (10.000x FOR/NEXT)..."',
@@ -25,7 +41,7 @@ DEMOS = {
         '20 COLOUR 3:PRINT "=== 100Hz IRQ MULTITASKING SHOWCASE ==="',
         '30 ?&70=0:P%=&900:[OPT 2:INC &70:RTS:]',
         '40 ?&2F6=0:?&2F7=&09',
-        '50 COLOUR 6:PRINT "Achtergrond 1: 16 Hardware Sprites (1280x1024)"',
+        '50 COLOUR 6:PRINT "Achtergrond 1: 16 Multi-Color Sprites + Boss"',
         '60 PRINT "Achtergrond 2: 6502 Teller op $0900 (@100Hz)"',
         '70 COLOUR 7:PRINT "Voorgrond:     Fullscreen 3D MiniGPU Tunnel!"',
         '80 TIME=0:FOR R%=30 TO 480 STEP 30',
@@ -33,8 +49,8 @@ DEMOS = {
         '100 CIRCLE 640,512,R%',
         '110 GLINE 640-R%,512-R%,640+R%,512+R%',
         '120 GLINE 640-R%,512+R%,640+R%,512-R%',
-        '130 ?&A002=6:NEXT',
-        '140 COLOUR 2:PRINT "Klaar in ";TIME;" cs | IRQ Ticks: ";?&70',
+        '130 FOR D%=1 TO 150:NEXT:NEXT',
+        '140 COLOUR 2:PRINT "Klaar in ";TIME;" cs | IRQ Ticks: ";?&70;" | Botsingen: ";?&A028',
         '150 ?&2F7=0',
     ],
     "VUURWERK": [
@@ -47,16 +63,16 @@ DEMOS = {
         '70 GCOL 0,C%+R%:CIRCLE X%,Y%,R%',
         '80 GLINE X%-R%,Y%,X%+R%,Y%:GLINE X%,Y%-R%,X%,Y%+R%',
         '90 GLINE X%-R%,Y%-R%,X%+R%,Y%+R%:GLINE X%-R%,Y%+R%,X%+R%,Y%-R%',
-        '100 ?&A002=4:NEXT',
+        '100 FOR D%=1 TO 90:NEXT:NEXT',
         '110 NEXT',
-        '120 COLOUR 2:PRINT "Vuurwerk voltooid! 16 Sprites vliegen fullscreen!"',
+        '120 COLOUR 2:PRINT "Vuurwerk klaar! Alien-botsingen: ";?&A028',
     ],
     "KLOK": [
         '10 CLS:CLG:*BG OFF',
         '20 COLOUR 3:PRINT "=== FULLSCREEN 100Hz HARDWARE KLOK & RADAR ==="',
         '30 GCOL 0,28:CIRCLE 640,512,380:CIRCLE 640,512,376',
         '40 GCOL 0,255:CIRCLE 640,512,12',
-        '50 ?&A020=0:?&A025=1',
+        '50 ?&A020=0:?&A025=1:?&A029=&23',
         '60 TIME=0:FOR S%=0 TO 15',
         '70 X%=640+((S%-8)*38):Y%=512-((S% AND 7)*38)',
         '80 GCOL 0,3:GLINE 640,512,X%,Y%',
@@ -69,7 +85,7 @@ DEMOS = {
     ],
     "SYNTHBG": [
         '10 CLS:CLG:*BG ON',
-        '20 COLOUR 5:PRINT "=== 1984 SYNTHWAVE HORIZON (1280x1024) ==="',
+        '20 COLOUR 5:PRINT "=== 1984 SYNTHWAVE HORIZON + BOSS ALIEN ==="',
         '30 GCOL 0,224:RECT 0,520,1279,400',
         '40 GCOL 0,252:CIRCLE 640,520,180',
         '50 GCOL 0,31:GLINE 0,520,1279,520',
@@ -77,20 +93,20 @@ DEMOS = {
         '70 GCOL 0,199:GLINE 0,Y%,1279,Y%:NEXT',
         '80 FOR X%=0 TO 1279 STEP 80',
         '90 GCOL 0,59:GLINE 640,520,X%,20:NEXT',
-        '100 COLOUR 3:PRINT "16 Aliens stuiteren nu over het HELE scherm!"',
+        '100 COLOUR 3:PRINT "16 Multi-Color Aliens + 64x64 Boss botsen live!"',
         '110 FOR K%=0 TO 15:?&A020=K%:?(&2D0+K%)=(K%*19) OR &1A:NEXT',
-        '120 COLOUR 2:PRINT "Fullscreen 1280x1024 Multitasking Actief!"',
+        '120 COLOUR 2:PRINT "Hardware Collision Teller ($A028): ";?&A028',
     ],
 }
 
 README2_TXT = (
     "=== WELKOM OP DRIVE 2 (DEMO DISK) ===\r"
-    "Start met CHAIN of LOAD + RUN:\r"
-    " 1. CHAIN \"MULTITASK\" -> IRQ + GPU\r"
-    " 2. CHAIN \"VUURWERK\"  -> Vuurwerk!\r"
-    " 3. CHAIN \"SYNTHBG\"   -> 80s Horizon\r"
-    " 4. CHAIN \"KLOK\"      -> 100Hz Radar\r"
-    " 5. CHAIN \"BENCHMARK\" -> 27MHz Test"
+    "Start met CHAIN \"NAAM\":\r"
+    " 1. CHAIN \"ALIENWAR\"  -> Boss+Botsing!\r"
+    " 2. CHAIN \"MULTITASK\" -> IRQ + 3D GPU\r"
+    " 3. CHAIN \"VUURWERK\"  -> Vuurwerk!\r"
+    " 4. CHAIN \"SYNTHBG\"   -> 80s Horizon\r"
+    " 5. CHAIN \"KLOK\" / \"BENCHMARK\""
 )
 
 def send_cmd(s, cmd, wait=0.4):
@@ -105,15 +121,20 @@ def main():
     time.sleep(0.3)
     s.read_all()
 
+    # Schoon eventuele dubbele Drive 2 bestanden op Drive 0 op
+    send_cmd(s, "*SD", 0.5)
+    send_cmd(s, "*DRIVE 0", 0.5)
+    for dup in ["BENCHMARK", "MULTITASK", "VUURWERK", "KLOK", "SYNTHBG", "README2.TXT"]:
+        send_cmd(s, f"*DELETE {dup}", 0.5)
+
     print("=== Overschakelen naar MicroSD Drive 2 (*SD & *DRIVE 2) ===")
     print(send_cmd(s, "*BG OFF", 0.4).strip())
-    print(send_cmd(s, "*SD", 0.6).strip())
     print(send_cmd(s, "*DRIVE 2", 0.6).strip())
     print(send_cmd(s, "*WIPE", 1.2).strip())
 
-    # Upload alle 5 Fullscreen BBC BASIC + 6502/GPU Demo's naar Drive 2
+    # Upload alle 6 Fullscreen BBC BASIC + 6502/GPU Demo's naar Drive 2
     for name, lines in DEMOS.items():
-        print(f"\nUploaden van {name} (1280x1024 Fullscreen) naar Drive 2...")
+        print(f"\nUploaden van {name} naar Drive 2...")
         send_cmd(s, "NEW", 0.2)
         for line in lines:
             send_cmd(s, line, 0.08)
@@ -133,12 +154,11 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live alle 5 de fullscreen demo's achter elkaar en eindig met SYNTHBG + *BG ON!
+    # Draai nu live de nieuwe ALIENWAR + alle demo's en eindig met SYNTHBG!
     for demo, wait_s in [
-        ("BENCHMARK", 2.2),
-        ("KLOK", 3.5),
-        ("VUURWERK", 3.8),
-        ("MULTITASK", 2.6),
+        ("ALIENWAR", 3.5),
+        ("VUURWERK", 3.0),
+        ("MULTITASK", 2.5),
         ("SYNTHBG", 1.8),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")

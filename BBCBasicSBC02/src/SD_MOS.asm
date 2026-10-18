@@ -49,6 +49,9 @@ SPR_Y_LO     = $A023
 SPR_Y_HI     = $A024
 SPR_ACT      = $A025
 SPR_STEP     = $A026
+SPR_COLL     = $A027
+SPR_BOUNCES  = $A028
+SPR_ATTR     = $A029
 
 FILE_BUF    = $7A00     ; 512-byte stream buffer for OPENIN / OPENOUT
 SD_BUF      = $7C00     ; 512-byte directory / sector buffer
@@ -1575,6 +1578,17 @@ endmacro
    STA SPR_Y_HI
    LDA #$01
    STA SPR_ACT
+   TXA
+   CLC: ADC #$01
+   CPX #$0F
+   BNE bg_not_boss
+   LDA #$21                  ; Sprite 15 = 64x64 Rode Mega-Boss ($21)
+.bg_not_boss
+   CPX #$03
+   BCS bg_attr_ok
+   ORA #$10                  ; Sprites 0..2 = 16x16 Snelle Mini-Scouts
+.bg_attr_ok
+   STA SPR_ATTR
    TXA
    AND #$03
    CLC: ADC #$02
