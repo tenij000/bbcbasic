@@ -16,7 +16,12 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
     * `RECT X, Y, BREEDTE, HOOGTE [, 1]` & `PLOT 101, X2, Y2` (Hardware rechthoek-omtrek of **74,25 MHz Solid Filled Rectangle**!)
     * `CIRCLE X, Y, STRAAL [, 1]` & `PLOT 153, R, 0` (Midpoint hardware cirkel-omtrek of **Solid Filled Disc / Planeet**!)
     * `MOVE X1, Y1 : MOVE X2, Y2 : PLOT 85, X3, Y3` (**Hardware Solid Filled Triangle Engine** voor razendsnelle gevulde 3D-polygonen en piramides!)
-    * `GCOL 0, KLEUR` (standaard) / `GCOL 1, KLEUR` (auto-fill cirkels) & `CLG` (8-bit RGB332 / BBC BASIC kleurenpalet)
+    * `GCOL 0..4, KLEUR`: **Volledige BBC BASIC Logische Read-Modify-Write Modi** in hardware (`0`=Overschrijven, `1`=OR, `2`=AND, `3`=**XOR** voor flikkervrije crosshairs/lasers/rubber-banding, `4`=INVERT) + **Volledig 256-Kleuren RGB332 Palet (`GCOL m, 8..255`)**!
+    * `POINT(X, Y)` & `?$A02B`: **Hardware Pixel-Readback Engine** (`PLOT 222, X, Y`) leest elke pixel uit het 8 MB SDRAM terug naar BBC BASIC voor pixel-exacte botsingsdetectie, doolhof-muren en kleurenpipet!
+    * `*SSAVE [0..14]` & `*SLOAD [0..14]`: **6 ms 32-Bit Hardware Screen Blitter** (`PLOT 220` / `PLOT 221`) kopieert of herstelt een compleet `1280×1024` scherm in **163.840 32-bit SDRAM-bursts (~6 milliseconden!)** naar/van 15 vrije SDRAM-slots!
+* **🕹️ Live Arcade Joypad / Key-Matrix Register (`$A004`), `ADVAL(0)` & Non-Blocking `INKEY(0)`:**
+  * Houdt in hardware (`ps2_keyboard.v`) live het indrukken (`Make`) en loslaten (`Break F0`) bij van 8 gelijktijdige actie-richtingen: `Up/W` (`bit 0`), `Down/S` (`bit 1`), `Left/A` (`bit 2`), `Right/D` (`bit 3`), `Fire1 Space/Z` (`bit 4`), `Fire2 X/Shift/Ctrl` (`bit 5`), `Select C/Tab` (`bit 6`) en `Start Enter/Esc` (`bit 7`)!
+  * Direct uit te lezen via `?$A004`, `ADVAL(0)` (`OSBYTE &80`) en non-blocking `INKEY(0)` / `INKEY$(0)` (`OSBYTE &81`).
 * **🔤 `VDU 23` User-Defined Characters (UDG / Custom Arcade Font Designer):**
   * Herdefinieer live vanuit BBC BASIC elk 8×8 karakter (`CHR$(224..255)` of `CHR$(32..127)`) met `VDU 23, char, b0, b1, b2, b3, b4, b5, b6, b7` voor eigen Pac-Man, Spookjes, Space Invaders, tegels en valutasymbolen in elke `MODE 0..7`!
 * **👾 16 Multi-Color Hardware Sprites (`16×16` Scouts, `32×32` Fighters & `64×64` Mega-Boss!):**
@@ -36,7 +41,7 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
   * **MicroSD-kaart (SPI Master op `$A010-$A011`):** Ondersteunt SDHC/SDXC-kaarten met een ingebouwd **SuperFloppy Catalogus-bestandssysteem** (32 bestandsslots van elk 32 KB = 1 MB directe retro-opslag).
   * **4 MB Interne SDRAM-Disk & RAM-Expansie (`$A012-$A015`):** Gebruikt de bovenste 4 Megabyte van het 64 Mbit SDRAM (op 74,25 MHz!) als razendsnelle interne RAM-disk (met volledige 32 KB per bestandsslot) én als 4 MB RAM-expansie voor de 6502, waarmee **8 FPGA BSRAM-blokken** zijn vrijgespeeld!
   * **Volledige BBC BASIC & 6502 Machinetaal bestandscommando's:**
-    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `CHAIN "NAAM"`, `*CAT`, `*INFO`, `*WIPE`, `*SDRAM`, `*SD`
+    * Programma's: `SAVE "NAAM"`, `LOAD "NAAM"`, `CHAIN "NAAM"`, `*CAT`, `*INFO`, `*WIPE`, `*SDRAM`, `*SD`, `*SSAVE [0..14]`, `*SLOAD [0..14]`
     * Pure 6502 Machinetaal (`$6000`): `*RUN <NAAM>`, `*BRUN <NAAM>`, `*BLOAD <NAAM>`, `*BSAVE <NAAM>`
     * Databestanden (Random Access / Streams): `OPENOUT`, `OPENIN`, `OPENUP`, `PRINT#`, `INPUT#`, `BPUT#`, `BGET#`, `EOF#`, `PTR#`, `EXT#`, `CLOSE#`.
 * **⌨️ Zelfstandig werken met PS/2-Toetsenbord + PC-Terminal:**
@@ -59,12 +64,13 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | **`$A000 - $A001`** | 2 B | **6850 ACIA Emulatie**: Status (`$A000`), Toetsenbord-in / GPU VDU-uit (`$A001`) |
 | **`$A002`** | 1 B | **Hardware Delay Timer**: Schrijf `N` om de CPU `N × 10 ms` te pauzeren via `RDY` |
 | **`$A003`** | 1 B | **100 Hz System Timer (`TIMER_TICKS`)**: Hardware centisecond-klok & IRQ bron voor `TIME` en multitasking |
+| **`$A004`** | 1 B | **Live Arcade Joypad / Key-Matrix (`JOYPAD`)**: `bit 0`=Up/W, `1`=Down/S, `2`=Left/A, `3`=Right/D, `4`=Space/Z, `5`=X/Shift/Ctrl, `6`=C/Tab, `7`=Enter/Esc |
 | **`$A010 - $A011`** | 2 B | **MicroSD Hardware SPI Controller**: Data (`$A010`), CS & Kloksnelheid (`$A011`) |
 | **`$A012 - $A015`** | 4 B | **4 MB Interne SDRAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`), Bank 0..63 (`$A015`) |
 | **`$A020 - $A026`** | 7 B | **Directe Hardware Sprite & Physics Registers**: `SPR_SEL` (`$A020`), `X/Y` (`$A021-$A024`), `ACT` (`$A025`), `SPR_STEP` (`$A026`) |
-| **`$A027 - $A02A`** | 4 B | **Sprite Collision, Attribute & Video Mode**: `SPR_COLL` (`$A027`), `SPR_BOUNCES` (`$A028`), `SPR_ATTR` (`$A029`), `VID_MODE` (`$A02A`) |
+| **`$A027 - $A02B`** | 5 B | **Sprite Collision, Attribute, Video Mode & Pixel Readback**: `SPR_COLL` (`$A027`), `SPR_BOUNCES` (`$A028`), `SPR_ATTR` (`$A029`), `VID_MODE` (`$A02A`), `FB_PIXEL` (`$A02B`) |
 | **`$A030 - $A038`** | 9 B | **4-Kanaals HDMI PSG Geluidschip**: `SND_FREQ0..2` (`$A030-$A032`), `SND_NOISE` (`$A033`), `SND_VOL0..3` (`$A034-$A037` Vol+Envelope/Sweep), `SND_CTRL` (`$A038`) |
-| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.60 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
+| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.70 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
 | **`$C000 - $FFFF`** | **16 KB** | **Acorn BBC BASIC II ROM + MOS Vectoren** (`Basic2.asm` + `SBC_MOS.asm`) |
 
 ---
@@ -89,24 +95,28 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 
 ---
 
-## 🚀 Overzicht van BBC BASIC & SD-MOS 1.60 Commando's
+## 🚀 Overzicht van BBC BASIC & SD-MOS 1.70 Commando's
 
-### 1. Grafische GPU-commando's, Hardware Solid Fill & `VDU 23` Custom Characters
+### 1. Grafische GPU-commando's, Solid Fill, `GCOL 0..4` XOR, `POINT(X,Y)` & `*SSAVE` / `*SLOAD`
 ```basic
 CLS                              : REM Wis tekstscherm (en reset hardware-scroll)
 CLG                              : REM Wis grafisch scherm (SDRAM framebuffer)
 COLOUR 2                         : REM Zet tekstkleur (0=Zwart, 1=Rood, 2=Groen, 3=Geel, 4=Blauw, 5=Magenta, 6=Cyaan, 7=Wit)
-GCOL 0, 14                       : REM Zet tekenkleur voor de GPU (GCOL 1, c = auto-fill cirkels)
-GLINE 100, 100, 500, 400         : REM Teken een hardware-lijn van (100,100) naar (500,400)
-RECT 300, 150, 400, 250          : REM Teken een rechthoek-omtrek op (300,150) van 400x250
+GCOL 0, 14                       : REM Zet tekenkleur (0..7 = BBC palet, 8..255 = direct 256-kleuren RGB332!)
+GCOL 3, 7                        : REM Zet GPU in Hardware XOR-modus (1=OR, 2=AND, 3=XOR, 4=INVERT)
+GLINE 100, 100, 500, 400         : REM Teken een lijn (in GCOL 3 XOR: nogmaals tekenen wist de lijn exact!)
 RECT 300, 150, 400, 250, 1       : REM Teken een HARDWARE GEVULDE rechthoek (74,25 MHz burst!)
 MOVE 300, 150 : PLOT 101, 700, 400 : REM BBC BASIC PLOT 101: Hardware Solid Filled Rectangle
-CIRCLE 640, 512, 150             : REM Teken een cirkel-omtrek op (640,512) met straal 150
 CIRCLE 640, 512, 150, 1          : REM Teken een HARDWARE GEVULDE schijf/planeet (PLOT 198 / PLOT 153)!
 MOVE 640, 512 : PLOT 153, 150, 0 : REM BBC BASIC PLOT 153: Hardware Solid Filled Circle / Disc
 MOVE 200, 200 : MOVE 600, 200 : PLOT 85, 400, 700 : REM BBC BASIC PLOT 85: Hardware Solid Filled Triangle!
+P% = POINT(640, 512)             : REM Lees de exacte pixelkleur op (640,512) terug uit het 8 MB SDRAM!
+*SSAVE 1                         : REM Kopieer het hele 1280x1024 scherm in 6 ms naar SDRAM Slot 1 (0..14)!
+*SLOAD 1                         : REM Herstel het complete 1280x1024 scherm in 6 ms vanuit SDRAM Slot 1!
 VDU 23, 224, &3C, &7E, &F8, &F0, &F8, &7E, &3C, 0 : REM Definieer CHR$(224) als Pac-Man karakter!
 PRINT CHR$(224)                  : REM Print jouw eigen 8x8 karakter in elke MODE 0..7!
+J% = ADVAL(0)                    : REM Lees het 8-bit Live Arcade Joypad register ($A004) uit!
+K% = INKEY(0)                    : REM Non-blocking toetsenbord-check (-1 als geen toets, anders ASCII)
 ?&A002 = 50                      : REM Wacht exact 500 ms (50 x 10 ms) via de hardware timer
 ```
 

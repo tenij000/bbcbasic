@@ -12,6 +12,7 @@ module vdu_parser (
     output reg signed [15:0] draw_x2,
     output reg signed [15:0] draw_y2,
     output reg [7:0]  draw_color,
+    output reg [2:0]  draw_gcol_mode,
     output reg        draw_start,
     output reg        draw_is_circle,
     output reg        draw_is_clear,
@@ -51,6 +52,7 @@ module vdu_parser (
     wire signed [15:0] plot_y = {din, yl};
     wire signed [15:0] abs_x  = ((k & 8'd4) != 8'd0) ? draw_x1 : (last_x + draw_x1);
     wire signed [15:0] abs_y  = ((k & 8'd4) != 8'd0) ? plot_y  : (last_y + plot_y);
+    wire [2:0] active_gcol_op = (gcol_mode <= 8'd4) ? gcol_mode[2:0] : 3'd0;
     
     always @(posedge clk) begin
         if (reset) begin
@@ -61,6 +63,7 @@ module vdu_parser (
             draw_is_clear <= 0;
             draw_is_fill <= 0;
             draw_is_triangle <= 0;
+            draw_gcol_mode <= 0;
             draw_x2 <= 0;
             draw_y2 <= 0;
             current_gcol <= 7; // white
@@ -111,6 +114,7 @@ module vdu_parser (
                                 draw_is_circle <= 0;
                                 draw_is_fill <= 0;
                                 draw_is_triangle <= 0;
+                                draw_gcol_mode <= 3'd0;
                                 draw_color <= 0; // Clear to Black
                             end
                         end
@@ -135,6 +139,7 @@ module vdu_parser (
                                 draw_x1 <= abs_x;
                                 draw_y1 <= abs_y;
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 0;
                                 draw_is_clear <= 0;
@@ -151,6 +156,7 @@ module vdu_parser (
                                 draw_x1 <= abs_x;
                                 draw_y1 <= abs_y;
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 0;
                                 draw_is_clear <= 0;
@@ -169,6 +175,7 @@ module vdu_parser (
                                 draw_x2 <= abs_x;
                                 draw_y2 <= abs_y;
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 0;
                                 draw_is_clear <= 0;
@@ -185,6 +192,7 @@ module vdu_parser (
                                 draw_x1 <= abs_x;
                                 draw_y1 <= abs_y;
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 0;
                                 draw_is_clear <= 0;
@@ -201,10 +209,11 @@ module vdu_parser (
                                 draw_x1 <= abs_x;
                                 draw_y1 <= abs_y;
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 1;
                                 draw_is_clear <= 0;
-                                draw_is_fill <= k[3] | gcol_mode[0];
+                                draw_is_fill <= k[3];
                                 draw_is_triangle <= 0;
                             end else if (k == 198 || k == 199) begin
                                 // Custom hardware circle: PLOT 199, R, 0 (Outline) / PLOT 198, R, 0 (Solid Filled)
@@ -213,10 +222,11 @@ module vdu_parser (
                                 draw_x1 <= last_x + draw_x1; // Center X + Radius R
                                 draw_y1 <= last_y;           // Center Y + 0
                                 draw_color <= current_gcol;
+                                draw_gcol_mode <= active_gcol_op;
                                 draw_start <= 1;
                                 draw_is_circle <= 1;
                                 draw_is_clear <= 0;
-                                draw_is_fill <= (k == 8'd198) | gcol_mode[0];
+                                draw_is_fill <= (k == 8'd198);
                                 draw_is_triangle <= 0;
                             end else if (k == 200) begin
                                 // PLOT 200, ID, 0 : Select Active Sprite (0-15)
@@ -249,6 +259,28 @@ module vdu_parser (
                                 snd_pitch <= draw_x1[7:0];
                                 snd_vol   <= plot_y[7:0];
                                 snd_we    <= 1;
+                            end else if (k == 220 || k == 221) begin
+                                // PLOT 220, Slot, 0 (*SSAVE) / PLOT 221, Slot, 0 (*SLOAD):
+                                // Hardware 32-bit SDRAM Screen Blitter (Slot 0..14 -> Page 1..15)
+                                draw_start <= 1;
+                                draw_is_clear <= 1;
+                                draw_is_circle <= 0;
+                                draw_is_fill <= 0;
+                                draw_is_triangle <= 0;
+                                draw_gcol_mode <= (k == 8'd220) ? 3'd6 : 3'd7;
+                                draw_color <= (draw_x1[3:0] == 4'd15) ? 8'd1 : {4'd0, draw_x1[3:0] + 4'd1};
+                            end else if (k == 222) begin
+                                // PLOT 222, X, Y : Hardware Pixel Readback for POINT(X, Y) ($A02B)
+                                draw_x0 <= draw_x1;
+                                draw_y0 <= plot_y;
+                                draw_x1 <= draw_x1;
+                                draw_y1 <= plot_y;
+                                draw_gcol_mode <= 3'd5;
+                                draw_start <= 1;
+                                draw_is_circle <= 0;
+                                draw_is_clear <= 0;
+                                draw_is_fill <= 0;
+                                draw_is_triangle <= 0;
                             end
                         end
                         // VDU 18 (GCOL m, c)
@@ -269,6 +301,7 @@ module vdu_parser (
                                 draw_is_circle <= 1'b0;
                                 draw_is_fill <= 1'b0;
                                 draw_is_triangle <= 1'b0;
+                                draw_gcol_mode <= 3'd0;
                                 draw_color <= 8'd0;
                             end
                         end

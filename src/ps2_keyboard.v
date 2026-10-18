@@ -1,12 +1,13 @@
 `timescale 1ns / 1ps
 
 module ps2_keyboard (
-    input  wire       clk,         // 27 MHz system clock
+    input  wire       clk,          // 27 MHz system clock
     input  wire       reset,
-    input  wire       ps2_clk,     // Pin 74 (D+) - PS/2 Clock
-    input  wire       ps2_data,    // Pin 73 (D-) - PS/2 Data
+    input  wire       ps2_clk,      // Pin 74 (D+) - PS/2 Clock
+    input  wire       ps2_data,     // Pin 73 (D-) - PS/2 Data
     output reg  [7:0] ascii_code,
-    output reg        ascii_valid
+    output reg        ascii_valid,
+    output reg  [7:0] joypad_state  // Live 8-bit Arcade Joypad state ($A004)
 );
 
     // --- 1. Synchronizer & Digital Debounce Filter ---
@@ -165,17 +166,39 @@ module ps2_keyboard (
     always @(posedge clk) begin
         ascii_valid <= 1'b0;
         if (reset) begin
-            is_break  <= 1'b0;
-            is_ext    <= 1'b0;
-            shift_l   <= 1'b0;
-            shift_r   <= 1'b0;
-            caps_lock <= 1'b1; // Start met Caps Lock aan voor BBC BASIC
+            is_break     <= 1'b0;
+            is_ext       <= 1'b0;
+            shift_l      <= 1'b0;
+            shift_r      <= 1'b0;
+            caps_lock    <= 1'b1; // Start met Caps Lock aan voor BBC BASIC
+            joypad_state <= 8'h00;
         end else if (scancode_ready) begin
             if (scancode == 8'hF0) begin
                 is_break <= 1'b1;
             end else if (scancode == 8'hE0) begin
                 is_ext <= 1'b1;
             end else begin
+                // Live 8-bit Arcade Joypad Matrix ($A004):
+                //   Bit 0 ($01): Up    (Arrow Up / W / KP8)
+                //   Bit 1 ($02): Down  (Arrow Down / S / KP2)
+                //   Bit 2 ($04): Left  (Arrow Left / A / KP4)
+                //   Bit 3 ($08): Right (Arrow Right / D / KP6)
+                //   Bit 4 ($10): Fire1 (Space / Z / KP0)
+                //   Bit 5 ($20): Fire2 (X / Shift / Ctrl)
+                //   Bit 6 ($40): Select/Weapon (C / Tab)
+                //   Bit 7 ($80): Start/Menu (Enter / Esc)
+                case (scancode)
+                    8'h75, 8'h1D:               joypad_state[0] <= ~is_break;
+                    8'h72, 8'h1B:               joypad_state[1] <= ~is_break;
+                    8'h6B, 8'h1C:               joypad_state[2] <= ~is_break;
+                    8'h74, 8'h23:               joypad_state[3] <= ~is_break;
+                    8'h29, 8'h1A, 8'h70:        joypad_state[4] <= ~is_break;
+                    8'h22, 8'h12, 8'h59, 8'h14: joypad_state[5] <= ~is_break;
+                    8'h21, 8'h0D:               joypad_state[6] <= ~is_break;
+                    8'h5A, 8'h76:               joypad_state[7] <= ~is_break;
+                    default: ;
+                endcase
+
                 if (is_break) begin
                     // Key released
                     is_break <= 1'b0;

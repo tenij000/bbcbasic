@@ -178,15 +178,38 @@ DEMOS = {
         '90 MODE 131:PRINT "=== MODE 3: 80x41 GROENE FOSFOR TERMINAL + 3D GRAPHICS ==="',
         '100 COLOUR 3:PRINT "Alle 8 BBC Modes (MODE 0..7) klaar! Actieve MODE = ";?&A02A',
     ],
+    "DEFENDER": [
+        '10 MODE 1:*BG ON',
+        '15 *GCLS',
+        '20 VDU 23,224,24,60,126,255,255,126,60,24',
+        '30 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "   * DEFENDER: XOR + BLITTER + JOYPAD * "',
+        '40 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "   * DEFENDER: XOR + BLITTER + JOYPAD * "',
+        '50 COLOUR 128:GCOL 0,4:MOVE 0,80:MOVE 0,260:PLOT 85,340,460:PLOT 85,680,220:PLOT 85,1020,480:PLOT 85,1279,180',
+        '60 GCOL 0,1:CIRCLE 1000,760,95,1:GCOL 0,3:CIRCLE 1000,760,45,1',
+        '70 GCOL 0,6:RECT 80,540,260,140,1:GCOL 0,2:MOVE 80,680:MOVE 210,840:PLOT 85,340,680',
+        '80 *SSAVE 1',
+        '90 *GCLS',
+        '95 *SLOAD 1',
+        '100 P%=POINT(1000,760):COLOUR 6:PRINT "POINT(1000,760)=";P%;" *SSAVE/*SLOAD=OK!"',
+        '110 BX%=380:BY%=140:SX%=220:SY%=520',
+        '120 FOR F%=1 TO 12:J%=ADVAL(0):IF J% AND 1 SY%=SY%+24',
+        '130 IF J% AND 2 SY%=SY%-24',
+        '140 BX%=BX%+18:?&A020=2:?&2CA=BX%:?&2EA=BY%',
+        '150 GCOL 3,7:GLINE SX%,SY%,BX%*2,720-BY%*2:CIRCLE BX%*2,720-BY%*2,36',
+        '160 PLOT 210,120+F%*8,&8E:PLOT 213,5,&8C:?&A002=8',
+        '170 GCOL 3,7:GLINE SX%,SY%,BX%*2,720-BY%*2:CIRCLE BX%*2,720-BY%*2,36',
+        '180 NEXT:GCOL 3,3:CIRCLE 1000,760,115',
+        '190 COLOUR 2:PRINT CHR$(224);" JOYPAD($A004)=";ADVAL(0);" GCOL 3 XOR=OK!"',
+    ],
 }
 
 README2_TXT = (
     "=== WELKOM OP DRIVE 2 (DEMO DISK) ===\r"
     "Start met CHAIN \"NAAM\":\r"
-    "1. SOLID3D   -> 3D Fill + VDU 23 UDG!\r"
-    "2. TELETEKST -> MODE 7 NOS Teletekst!\r"
-    "3. CHIPTUNE  -> 4-Ch HDMI Audio!\r"
-    "4. MODES / ALIENWAR / SYNTHBG"
+    "1. DEFENDER  -> XOR+Blitter+Joypad!\r"
+    "2. SOLID3D   -> 3D Fill + VDU 23 UDG!\r"
+    "3. TELETEKST -> MODE 7 NOS Teletekst!\r"
+    "4. CHIPTUNE / MODES / ALIENWAR"
 )
 
 def send_cmd(s, cmd, wait=0.4):
@@ -208,7 +231,7 @@ def main():
     print(send_cmd(s, "*DRIVE 2", 0.6).strip())
     print(send_cmd(s, "*WIPE", 1.2).strip())
 
-    # Upload alle Fullscreen BBC BASIC + HDMI Sound + MODE 0..7 + Solid3D Demo's naar Drive 2
+    # Upload alle Fullscreen BBC BASIC + HDMI Sound + MODE 0..7 + Solid3D + Defender Demo's naar Drive 2
     for name, lines in DEMOS.items():
         print(f"\nUploaden van {name} naar Drive 2...")
         send_cmd(s, "NEW", 0.2)
@@ -230,11 +253,10 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live CHIPTUNE, TELETEKST en eindig op het prachtige SOLID3D scherm!
+    # Draai nu live CHIPTUNE, SOLID3D en eindig op het prachtige nieuwe DEFENDER scherm!
     for demo, wait_s in [
-        ("CHIPTUNE", 4.5),
-        ("TELETEKST", 2.0),
         ("SOLID3D", 2.5),
+        ("DEFENDER", 4.5),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")
         out = send_cmd(s, f'CHAIN "{demo}"', wait_s)

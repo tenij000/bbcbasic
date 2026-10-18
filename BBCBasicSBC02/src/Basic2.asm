@@ -6416,12 +6416,7 @@ IF (VALversion<300)
  JSR LBDEA
  PLA:STA &2D
  PLA:STA &2C
- LDX #&2A
- LDA #&09
- JSR OSWORD
- LDA &2E
- BMI LAB9D
- JMP LAED8
+ JMP do_point
 ENDIF
 IF (VALversion>=300)
  \ =NOT

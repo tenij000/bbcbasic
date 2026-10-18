@@ -10,6 +10,7 @@ module gpu (
     input signed [15:0] x2,
     input signed [15:0] y2,
     input [7:0]  color,
+    input [2:0]  gcol_mode,
     input        start,
     input        is_circle,
     input        is_clear,
@@ -21,6 +22,7 @@ module gpu (
     output reg [9:0]  fb_x,
     output reg [8:0]  fb_y,
     output reg [7:0]  fb_color,
+    output reg [2:0]  fb_gcol_mode,
     output reg        fb_write,
     input             fb_ack
 );
@@ -85,6 +87,7 @@ module gpu (
             state <= 0;
             busy <= 0;
             fb_write <= 0;
+            fb_gcol_mode <= 0;
             drawing_circle <= 0;
             drawing_fill <= 0;
             drawing_triangle <= 0;
@@ -95,6 +98,7 @@ module gpu (
                     if (start) begin
                         busy <= 1;
                         fb_color <= color;
+                        fb_gcol_mode <= gcol_mode;
                         drawing_circle <= is_circle;
                         drawing_fill <= is_fill;
                         drawing_triangle <= is_triangle;
@@ -103,9 +107,9 @@ module gpu (
                             rect_x0 <= 10'd0;
                             clear_x <= 10'd0;
                             clear_y <= 9'd0;
-                            rect_x1 <= 10'd639;
+                            rect_x1 <= (gcol_mode >= 3'd6) ? 10'd636 : 10'd639;
                             rect_y1 <= 9'd359;
-                            state <= 9; // Fast SDRAM Rect/Clear loop
+                            state <= 9; // Fast SDRAM Rect/Clear/Blit loop
                         end else if (is_fill && !is_circle && !is_triangle) begin
                             // Solid Filled Rectangle (PLOT 101 / PLOT 97 / RECT X,Y,W,H,1)
                             rect_x0 <= rx0;
@@ -222,14 +226,22 @@ module gpu (
                 6: begin
                     if (x <= y) begin
                         if (drawing_fill) begin
-                            tx <= cx - (octant[2] ? y : x);
-                            target_x <= cx + (octant[2] ? y : x);
-                            case (octant[2:1])
-                                2'd0: ty <= cy + y;
-                                2'd1: ty <= cy - y;
-                                2'd2: ty <= cy + x;
-                                2'd3: ty <= cy - x;
-                            endcase
+                            if (((octant == 3'd0) && (err < 0 || x == y)) ||
+                                ((octant == 3'd2) && (err < 0 || x == y || y == 0)) ||
+                                ((octant == 3'd6) && (x == 0))) begin
+                                tx <= cx + (octant[2] ? y : x);
+                                target_x <= cx + (octant[2] ? y : x);
+                                ty <= 16'sd400; // Out-of-bounds Y skips fb_write cleanly in 1 cycle
+                            end else begin
+                                tx <= cx - (octant[2] ? y : x);
+                                target_x <= cx + (octant[2] ? y : x);
+                                case (octant[2:1])
+                                    2'd0: ty <= cy + y;
+                                    2'd1: ty <= cy - y;
+                                    2'd2: ty <= cy + x;
+                                    2'd3: ty <= cy - x;
+                                endcase
+                            end
                         end else begin
                             case (octant)
                                 3'd0: begin tx <= cx + x; ty <= cy + y; end
@@ -300,7 +312,7 @@ module gpu (
                                 state <= 9;
                             end
                         end else begin
-                            clear_x <= clear_x + 10'd1;
+                            clear_x <= clear_x + ((fb_gcol_mode >= 3'd6) ? 10'd4 : 10'd1);
                             state <= 9;
                         end
                     end

@@ -17,8 +17,10 @@ module sdram_framebuffer (
     input  wire [9:0]  gpu_x,
     input  wire [8:0]  gpu_y,
     input  wire [7:0]  gpu_color,
+    input  wire [2:0]  gpu_gcol_mode,
     input  wire        gpu_write,
     output reg         gpu_ack = 0,
+    output reg  [7:0]  gpu_read_pixel = 0,
 
     // 6502 CPU SDRAM-Disk Interface (Upper 4 MB of SDRAM: addr[20] == 1)
     input  wire        rd_req_toggle,
@@ -213,16 +215,18 @@ module sdram_framebuffer (
         end
     end
 
-    localparam ARB_IDLE = 0;
-    localparam ARB_WAIT_BUSY = 1;
-    localparam ARB_REFRESH = 2;
-    localparam ARB_WRITE = 3;
-    localparam ARB_READ = 4;
-    localparam ARB_WRITE_GPU = 5;
-    localparam ARB_WRITE_CPU = 6;
-    localparam ARB_READ_CPU  = 7;
-    reg [2:0] arb_state = 0;
-    reg [2:0] arb_next_state = 0;
+    localparam ARB_IDLE      = 4'd0;
+    localparam ARB_WAIT_BUSY = 4'd1;
+    localparam ARB_REFRESH   = 4'd2;
+    localparam ARB_WRITE     = 4'd3;
+    localparam ARB_READ      = 4'd4;
+    localparam ARB_WRITE_GPU = 4'd5;
+    localparam ARB_WRITE_CPU = 4'd6;
+    localparam ARB_READ_CPU  = 4'd7;
+    localparam ARB_RMW_GPU   = 4'd8;
+    localparam ARB_RMW_WRITE = 4'd9;
+    reg [3:0] arb_state = 0;
+    reg [3:0] arb_next_state = 0;
 
     reg [2:0] rd_req_sync = 0;
     reg [1:0] rd_byte_sel = 0;
@@ -239,19 +243,52 @@ module sdram_framebuffer (
 
     reg [7:0] gpu_rgb332;
     always @(*) begin
-        case (gpu_color[2:0])
-            3'd0: gpu_rgb332 = 8'h00; // Black
-            3'd1: gpu_rgb332 = 8'hE0; // Red
-            3'd2: gpu_rgb332 = 8'h1C; // Green
-            3'd3: gpu_rgb332 = 8'hFC; // Yellow
-            3'd4: gpu_rgb332 = 8'h03; // Blue
-            3'd5: gpu_rgb332 = 8'hE3; // Magenta
-            3'd6: gpu_rgb332 = 8'h1F; // Cyan
-            3'd7: gpu_rgb332 = 8'hFF; // White
-        endcase
+        if (gpu_color[7:3] != 5'd0) begin
+            gpu_rgb332 = gpu_color; // Direct 8-bit RGB332 palette (8..255)
+        end else begin
+            case (gpu_color[2:0])
+                3'd0: gpu_rgb332 = 8'h00; // Black
+                3'd1: gpu_rgb332 = 8'hE0; // Red
+                3'd2: gpu_rgb332 = 8'h1C; // Green
+                3'd3: gpu_rgb332 = 8'hFC; // Yellow
+                3'd4: gpu_rgb332 = 8'h03; // Blue
+                3'd5: gpu_rgb332 = 8'hE3; // Magenta
+                3'd6: gpu_rgb332 = 8'h1F; // Cyan
+                3'd7: gpu_rgb332 = 8'hFF; // White
+            endcase
+        end
     end
     
     wire [20:0] gpu_word_addr = (gpu_y * 160) + gpu_x[9:2];
+
+    reg [7:0] old_px;
+    reg [7:0] rmw_px;
+    reg [7:0] mapped_read_px;
+    always @(*) begin
+        case (gpu_x[1:0])
+            2'b00: old_px = sdram_dout[7:0];
+            2'b01: old_px = sdram_dout[15:8];
+            2'b10: old_px = sdram_dout[23:16];
+            2'b11: old_px = sdram_dout[31:24];
+        endcase
+        case (gpu_gcol_mode)
+            3'd1:    rmw_px = old_px | gpu_rgb332; // GCOL 1: OR
+            3'd2:    rmw_px = old_px & gpu_rgb332; // GCOL 2: AND
+            3'd3:    rmw_px = old_px ^ gpu_rgb332; // GCOL 3: XOR
+            default: rmw_px = ~old_px;             // GCOL 4: INVERT
+        endcase
+        case (old_px)
+            8'h00:   mapped_read_px = 8'd0;
+            8'hE0:   mapped_read_px = 8'd1;
+            8'h1C:   mapped_read_px = 8'd2;
+            8'hFC:   mapped_read_px = 8'd3;
+            8'h03:   mapped_read_px = 8'd4;
+            8'hE3:   mapped_read_px = 8'd5;
+            8'h1F:   mapped_read_px = 8'd6;
+            8'hFF:   mapped_read_px = 8'd7;
+            default: mapped_read_px = old_px;
+        endcase
+    end
 
     always @(posedge clk) begin
         if (!rst_n) begin
@@ -260,6 +297,7 @@ module sdram_framebuffer (
             sdram_wr <= 0;
             sdram_refresh <= 0;
             gpu_ack <= 0;
+            gpu_read_pixel <= 0;
             rd_req_sync <= 0;
             rd_ack_toggle <= 0;
             rd_rdata <= 0;
@@ -287,16 +325,24 @@ module sdram_framebuffer (
                         arb_next_state <= ARB_WRITE;
                         arb_state <= ARB_WAIT_BUSY;
                     end else if (gpu_write) begin
-                        sdram_addr <= gpu_word_addr;
-                        case (gpu_x[1:0])
-                            2'b00: begin sdram_wstrb <= 4'b0001; sdram_din <= {24'd0, gpu_rgb332}; end
-                            2'b01: begin sdram_wstrb <= 4'b0010; sdram_din <= {16'd0, gpu_rgb332, 8'd0}; end
-                            2'b10: begin sdram_wstrb <= 4'b0100; sdram_din <= {8'd0, gpu_rgb332, 16'd0}; end
-                            2'b11: begin sdram_wstrb <= 4'b1000; sdram_din <= {gpu_rgb332, 24'd0}; end
-                        endcase
-                        sdram_wr <= 1;
-                        arb_next_state <= ARB_WRITE_GPU;
-                        arb_state <= ARB_WAIT_BUSY;
+                        if (gpu_gcol_mode == 3'd0) begin
+                            sdram_addr <= gpu_word_addr;
+                            case (gpu_x[1:0])
+                                2'b00: begin sdram_wstrb <= 4'b0001; sdram_din <= {24'd0, gpu_rgb332}; end
+                                2'b01: begin sdram_wstrb <= 4'b0010; sdram_din <= {16'd0, gpu_rgb332, 8'd0}; end
+                                2'b10: begin sdram_wstrb <= 4'b0100; sdram_din <= {8'd0, gpu_rgb332, 16'd0}; end
+                                2'b11: begin sdram_wstrb <= 4'b1000; sdram_din <= {gpu_rgb332, 24'd0}; end
+                            endcase
+                            sdram_wr <= 1;
+                            arb_next_state <= ARB_WRITE_GPU;
+                            arb_state <= ARB_WAIT_BUSY;
+                        end else begin
+                            // Read-Modify-Write (GCOL 1..4), Pixel Readback (POINT), or 32-bit Screen Blit (*SSAVE / *SLOAD)
+                            sdram_addr <= (gpu_gcol_mode == 3'd7) ? {1'b0, gpu_color[3:0], gpu_word_addr[15:0]} : gpu_word_addr;
+                            sdram_rd <= 1;
+                            arb_next_state <= ARB_RMW_GPU;
+                            arb_state <= ARB_WAIT_BUSY;
+                        end
                     end else if (lb_read_req) begin
                         sdram_addr <= (lb_fetch_y * 160) + lb_fetch_col;
                         sdram_rd <= 1;
@@ -342,6 +388,37 @@ module sdram_framebuffer (
                         gpu_ack <= 1;
                         arb_state <= ARB_IDLE;
                     end
+                end
+                ARB_RMW_GPU: begin
+                    if (sdram_data_ready) begin
+                        gpu_read_pixel <= mapped_read_px;
+                        if (gpu_gcol_mode == 3'd5) begin
+                            // POINT(X,Y) pixel readback complete
+                            gpu_ack <= 1;
+                            arb_state <= ARB_IDLE;
+                        end else if (gpu_gcol_mode >= 3'd6) begin
+                            // *SSAVE (mode 6: Screen -> Slot) or *SLOAD (mode 7: Slot -> Screen) 32-bit word copy
+                            sdram_addr <= (gpu_gcol_mode == 3'd6) ? {1'b0, gpu_color[3:0], gpu_word_addr[15:0]} : gpu_word_addr;
+                            sdram_din <= sdram_dout;
+                            sdram_wstrb <= 4'b1111;
+                            arb_state <= ARB_RMW_WRITE;
+                        end else begin
+                            // GCOL 1..4 Read-Modify-Write (OR, AND, XOR, INVERT)
+                            sdram_addr <= gpu_word_addr;
+                            case (gpu_x[1:0])
+                                2'b00: begin sdram_wstrb <= 4'b0001; sdram_din <= {24'd0, rmw_px}; end
+                                2'b01: begin sdram_wstrb <= 4'b0010; sdram_din <= {16'd0, rmw_px, 8'd0}; end
+                                2'b10: begin sdram_wstrb <= 4'b0100; sdram_din <= {8'd0, rmw_px, 16'd0}; end
+                                2'b11: begin sdram_wstrb <= 4'b1000; sdram_din <= {rmw_px, 24'd0}; end
+                            endcase
+                            arb_state <= ARB_RMW_WRITE;
+                        end
+                    end
+                end
+                ARB_RMW_WRITE: begin
+                    sdram_wr <= 1;
+                    arb_next_state <= ARB_WRITE_GPU;
+                    arb_state <= ARB_WAIT_BUSY;
                 end
                 ARB_READ: begin
                     if (sdram_data_ready) begin

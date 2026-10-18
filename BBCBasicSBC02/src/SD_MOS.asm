@@ -1236,6 +1236,11 @@ endmacro
    BNE cli_not_t
    JMP cli_type
 .cli_not_t
+   CMP #'G'
+   BNE cli_not_g
+   LDA #16
+   JMP OSWRCH
+.cli_not_g
    CMP #'C'
    BNE cli_do_cat
    INY
@@ -1542,20 +1547,27 @@ endmacro
    RTS
 
 .msg_help1
-   EQUS "=== SBC02 SD-MOS 1.50 + BBC MODES ===", $0D
+   EQUS "=== SBC02 SD-MOS 1.70 + BBC MODES ===", $0D
    EQUS " *CAT / *INFO [NAAM] Catalogus & Grootte", $0D
    EQUS " *DRIVE 0..3         Floppy Drive 0-3", $0D
    EQUS " *SD / *SDRAM        MicroSD / 4MB SDRAM", $0D
    EQUS " *RUN/*BLOAD/*BSAVE  6502 ASM op $6000", $0D, 0
 .msg_help2
-   EQUS " *COPY/*DELETE/*RENAME/*WIPE Bestanden", $0D
+   EQUS " *SSAVE/*SLOAD [0-9] 6ms Screen Blitter!", $0D
    EQUS " *TYPE <NAAM> / *DUMP [HEX]  Tekst/RAM", $0D
    EQUS " *BG ON / *BG OFF    16 Sprites + SFX!", $0D
-   EQUS " MODE 0..7 / PLOT 210..213 Video+Audio!", $0D, 0
+   EQUS " MODE 0..7 / POINT / GCOL 3 / $A004 Joy!", $0D, 0
 
 .cli_s_cmd
-   ; *SDRAM or *SD: check 3rd letter (after 'S','D')
-   INY: INY
+   ; *SSAVE, *SLOAD, *SDRAM or *SD:
+   INY
+   LDA (sd_ptr),Y
+   AND #$DF
+   CMP #'S'
+   BEQ cli_ssave
+   CMP #'L'
+   BEQ cli_sload
+   INY
    LDA (sd_ptr),Y
    AND #$DF
    CMP #'R'
@@ -1567,6 +1579,20 @@ endmacro
    LDA #$80
    STA f_sdram
    JMP cli_do_cat
+.cli_ssave
+   LDA #220
+   BNE cli_scr_op
+.cli_sload
+   LDA #221
+.cli_scr_op
+   PHA
+   JSR cli_extract_fn
+   LDA #25: JSR OSWRCH
+   PLA: JSR OSWRCH
+   LDA $0600: AND #$0F: JSR OSWRCH
+   LDA #0: JSR OSWRCH
+   JSR OSWRCH
+   JMP OSWRCH
 
 .cli_b_cmd
    INY
@@ -1933,6 +1959,27 @@ endmacro
    LDX #$00
    BEQ exit
 .not7f
+   CMP #$80                  ; OSBYTE &80 = ADVAL(0) -> Read Live Joypad ($A004)
+   BNE not80
+   LDX $A004
+   LDY #$00
+   BEQ exit
+.not80
+   CMP #$81                  ; OSBYTE &81 = INKEY(n) / INKEY$(n) non-blocking read
+   BNE not81
+   LDX ZP_RX_HEAD
+   CPX ZP_RX_TAIL
+   BEQ inkey_none
+   LDA RX_BUFFER,X
+   INC ZP_RX_HEAD
+   TAX
+   LDY #$00
+   BEQ exit
+.inkey_none
+   LDX #$FF
+   LDY #$FF
+   BNE exit
+.not81
    CMP #$83
    BNE not83
    LDY #$08
@@ -2079,53 +2126,5 @@ ENDIF
    LDA #$95
    STA UART
    BNE irq_exit
-}
-
-.reset_msg
-   EQUB $0D
-   EQUS "SBC02 SD-MOS 1.60 / BBC BASIC"
-   EQUB $0A, $0D
-IF USE_XON_XOFF = 1
-   EQUB $11
-ENDIF
-   EQUB $00
-
-.default_brk_handler
-.reset_handler
-{
-   CLD
-   LDX #$FF
-   TXS
-   LDA #<default_brk_handler
-   STA BRKV
-   LDA #>default_brk_handler
-   STA BRKV + 1
-   INX
-   STX f_mode
-   STX f_sdram
-   STX f_drive
-   STX bg_mode
-   STX usr_bgv
-   STX usr_bgv+1
-   LDY #ZP_END - ZP_START + 1
-.clrloop
-   STX ZP_START - 1, Y
-   DEY
-   BNE clrloop
-   LDA #<reset_msg
-   STA ZP_ERRPTR
-   LDA #>reset_msg
-   STA ZP_ERRPTR + 1
-   LDA #$95
-   STA UART
-   CLI
-.prloop
-   LDA reset_msg, Y
-   BEQ done
-   JSR OSASCI
-   INY
-   BNE prloop
-.done
-   JMP ENTER_BASIC
 }
 

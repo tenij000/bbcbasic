@@ -171,9 +171,13 @@ module top(
         .sd_miso(sd_miso)
     );
     
-    // --- PS/2 Keyboard Receiver (Olimex PS/2 on Pins 73 & 74) ---
+    // --- PS/2 Keyboard Receiver + Live Arcade Joypad ($A004) ---
     wire [7:0] ps2_ascii_code;
     wire       ps2_ascii_valid;
+    wire [7:0] ps2_joypad;
+    reg  [7:0] soft_joypad    = 8'h00;
+    reg  [7:0] uart_joypad    = 8'h00;
+    reg  [3:0] uart_joy_timer = 4'd0;
     reg        ps2_led_toggle = 1'b1;
 
     ps2_keyboard ps2_inst (
@@ -182,7 +186,8 @@ module top(
         .ps2_clk(ps2_clk),
         .ps2_data(ps2_data),
         .ascii_code(ps2_ascii_code),
-        .ascii_valid(ps2_ascii_valid)
+        .ascii_valid(ps2_ascii_valid),
+        .joypad_state(ps2_joypad)
     );
 
     // UART RX + PS/2 to CPU (CPU reading keyboard)
@@ -196,6 +201,8 @@ module top(
     wire signed [15:0] gpu_x0, gpu_x1, gpu_x2;
     wire signed [15:0] gpu_y0, gpu_y1, gpu_y2;
     wire [7:0]  gpu_cmd_color;
+    wire [2:0]  gpu_gcol_mode_sys;
+    wire [7:0]  gpu_read_pixel;
     wire gpu_start_sys;
     wire gpu_busy_sys;
     wire gpu_is_circle_sys;
@@ -267,6 +274,17 @@ module top(
     always @(posedge sys_clk) begin
         rd_ack_sync <= {rd_ack_sync[1:0], rd_ack_toggle};
 
+        if (reset) begin
+            soft_joypad    <= 8'h00;
+            uart_joypad    <= 8'h00;
+            uart_joy_timer <= 4'd0;
+        end else if (sys_timer_cnt == 19'd269_999) begin
+            if (uart_joy_timer != 4'd0)
+                uart_joy_timer <= uart_joy_timer - 4'd1;
+            else
+                uart_joypad <= 8'h00;
+        end
+
         // RAM write (0x0000 - 0x7FFF)
         if (cpu_rdy && cpu_we && cpu_ab < 16'h8000) begin
             cpu_ram[cpu_ab[14:0]] <= cpu_do;
@@ -282,6 +300,12 @@ module top(
         if (cpu_rdy && cpu_we && cpu_ab == 16'hA001) begin
             term_rx_data_cpu <= cpu_do;
             term_rx_valid_cpu <= 1;
+        end
+
+        // Software Joypad Override / Clear ($A004)
+        if (cpu_rdy && cpu_we && cpu_ab == 16'hA004) begin
+            soft_joypad <= cpu_do;
+            if (cpu_do == 8'h00) uart_joypad <= 8'h00;
         end
         
         // MicroSD Control & 4 MB SDRAM-Disk registers ($A011 - $A015)
@@ -324,6 +348,16 @@ module top(
         )) begin
             kbd_data <= uart_data;
             kbd_ready <= 1;
+            // Also map WASD / Space / Z / X over UART to temporary Joypad pulse ($A004)
+            case (uart_data)
+                "W", "w": begin uart_joypad[0] <= 1'b1; uart_joy_timer <= 4'd15; end
+                "S", "s": begin uart_joypad[1] <= 1'b1; uart_joy_timer <= 4'd15; end
+                "A", "a": begin uart_joypad[2] <= 1'b1; uart_joy_timer <= 4'd15; end
+                "D", "d": begin uart_joypad[3] <= 1'b1; uart_joy_timer <= 4'd15; end
+                " ", "Z", "z": begin uart_joypad[4] <= 1'b1; uart_joy_timer <= 4'd15; end
+                "X", "x": begin uart_joypad[5] <= 1'b1; uart_joy_timer <= 4'd15; end
+                default: ;
+            endcase
         end else if (ps2_ascii_valid && (uart_mode == 0)) begin
             kbd_data <= ps2_ascii_code;
             kbd_ready <= 1;
@@ -343,6 +377,8 @@ module top(
                 cpu_di <= kbd_data;
             end else if (cpu_ab == 16'hA003) begin
                 cpu_di <= timer_ticks;
+            end else if (cpu_ab == 16'hA004) begin
+                cpu_di <= ps2_joypad | soft_joypad | uart_joypad;
             end else if (cpu_ab == 16'hA010) begin
                 cpu_di <= sd_rx_data;
             end else if (cpu_ab == 16'hA014) begin
@@ -369,6 +405,8 @@ module top(
                 cpu_di <= sprite_attr_reg[spr_sel];
             end else if (cpu_ab == 16'hA02A) begin
                 cpu_di <= {5'b00000, video_mode};
+            end else if (cpu_ab == 16'hA02B) begin
+                cpu_di <= gpu_read_pixel;
             end else if (cpu_ab >= 16'hA030 && cpu_ab <= 16'hA033) begin
                 cpu_di <= snd_freq[cpu_ab[1:0]];
             end else if (cpu_ab >= 16'hA034 && cpu_ab <= 16'hA037) begin
@@ -423,6 +461,7 @@ module top(
         .draw_x2(gpu_x2),
         .draw_y2(gpu_y2),
         .draw_color(gpu_cmd_color),
+        .draw_gcol_mode(gpu_gcol_mode_sys),
         .draw_start(gpu_start_sys),
         .draw_is_circle(gpu_is_circle_sys),
         .draw_is_clear(gpu_is_clear_sys),
@@ -468,6 +507,7 @@ module top(
     wire [9:0] gpu_fb_x;
     wire [8:0] gpu_fb_y;
     wire [7:0] gpu_fb_color;
+    wire [2:0] gpu_fb_gcol_mode;
     wire       gpu_fb_write;
     wire       gpu_fb_ack;
 
@@ -481,6 +521,7 @@ module top(
         .x2(gpu_x2),
         .y2(gpu_y2),
         .color(gpu_cmd_color),
+        .gcol_mode(gpu_gcol_mode_sys),
         .start(gpu_start_hclk),
         .is_circle(gpu_is_circle_hclk),
         .is_clear(gpu_is_clear_hclk),
@@ -490,6 +531,7 @@ module top(
         .fb_x(gpu_fb_x),
         .fb_y(gpu_fb_y),
         .fb_color(gpu_fb_color),
+        .fb_gcol_mode(gpu_fb_gcol_mode),
         .fb_write(gpu_fb_write),
         .fb_ack(gpu_fb_ack)
     );
@@ -508,8 +550,10 @@ module top(
         .gpu_x(gpu_fb_x),
         .gpu_y(gpu_fb_y),
         .gpu_color(gpu_fb_color),
+        .gpu_gcol_mode(gpu_fb_gcol_mode),
         .gpu_write(gpu_fb_write),
         .gpu_ack(gpu_fb_ack),
+        .gpu_read_pixel(gpu_read_pixel),
         .rd_req_toggle(rd_req_toggle),
         .rd_req_we(rd_req_we),
         .rd_req_addr(rd_req_addr),
