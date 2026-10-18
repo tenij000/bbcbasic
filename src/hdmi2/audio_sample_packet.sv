@@ -97,11 +97,7 @@ generate
             if (audio_sample_word_present[i])
                 sub[i] = {{parity_bit[i][1], channel_status_right[aligned_frame_counter[i]], user_data_bit[i][1], valid_bit[i][1], parity_bit[i][0], channel_status_left[aligned_frame_counter[i]], user_data_bit[i][0], valid_bit[i][0]}, audio_sample_word[i][1], audio_sample_word[i][0]};
             else
-            `ifdef MODEL_TECH
                 sub[i] = 56'd0;
-            `else
-                sub[i] = 56'dx;
-            `endif
         end
     end
 endgenerate

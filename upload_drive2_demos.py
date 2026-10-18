@@ -4,14 +4,39 @@ import time
 # 6 Volledig Scherm (1280x1024 BBC BASIC / 720p HDMI) Showcase Demo's + README2.TXT voor Drive 2 (*DRIVE 2)
 
 DEMOS = {
+    "CHIPTUNE": [
+        '10 CLS:CLG:*BG ON',
+        '20 COLOUR 3:PRINT "=== 4-KANAALS 48kHz HDMI CHIPTUNE SYNTHESIZER ==="',
+        '30 COLOUR 6:PRINT "Kanaal 0..2: 3-Stemmig Stereo | Kanaal 3: Noise/Drums"',
+        '40 COLOUR 7:PRINT "1. Arcade Geluidseffecten (Laser, Power-Up & Explosie):"',
+        '50 PRINT "   -> Laser Zap ($A030=220, $A034=&AF)..."',
+        '60 PLOT 210,220,&AF:?&A002=35',
+        '70 PRINT "   -> Coin / Power-Up ($A031=80, $A035=&9F)..."',
+        '80 PLOT 211,80,&9F:?&A002=35',
+        '90 PRINT "   -> Boss Explosie ($A033=20, $A037=&8F)..."',
+        '100 PLOT 213,20,&8F:?&A002=45',
+        '110 COLOUR 2:PRINT "2. 4-Kanaals 1980s Arcade Chiptune + GPU Equalizer:"',
+        '120 RESTORE:FOR N%=1 TO 16:READ M%,H%,B%,D%',
+        '130 ?&A030=M%:?&A034=&8F:?&A031=H%:?&A035=&8C',
+        '140 ?&A032=B%:?&A036=&CB:IF D% THEN ?&A033=D%:?&A037=&CF',
+        '150 X%=80+(N%*70):GCOL 0,(N%*19) OR 3',
+        '160 RECT X%,120,48,M%*3:CIRCLE X%+24,140+M%*3,22',
+        '170 FOR W%=1 TO 900:NEXT:NEXT',
+        '180 ?&A030=120:?&A031=150:?&A032=180:?&A034=&8F:?&A035=&8F:?&A036=&8F',
+        '190 COLOUR 3:PRINT "C-Majeur Finale Akkoord (120:150:180) + Live Alien SFX!"',
+        '200 DATA 120,90,60,18, 150,120,60,0, 180,150,60,45, 240,180,60,0',
+        '210 DATA 160,120,80,18, 200,160,80,0, 240,200,80,45, 200,160,80,0',
+        '220 DATA 180,135,90,18, 225,180,90,0, 180,135,90,45, 150,112,90,0',
+        '230 DATA 120,90,60,18, 150,120,60,45, 180,150,60,18, 240,180,120,24',
+    ],
     "ALIENWAR": [
         '10 CLS:CLG:*BG ON:?&A028=0:?&A027=0',
         '20 FOR K%=0 TO 15:?(&2D0+K%)=((K% AND 1)*192)+54:NEXT',
-        '30 COLOUR 3:PRINT "=== ALIEN WAR: COLLISION & BOSS DEMO ==="',
+        '30 COLOUR 3:PRINT "=== ALIEN WAR: COLLISION, BOSS & HDMI SFX ==="',
         '40 COLOUR 6:PRINT "Sprite 15 = 64x64 Rode Mega-Boss ($A029=$21)"',
-        '50 PRINT "Sprite 0..2 = 16x16 Snelle Scouts | 15 Neon Kleuren!"',
+        '50 PRINT "Sprite 0..2 = 16x16 Snelle Scouts | Live HDMI Geluid!"',
         '60 GCOL 0,28:CIRCLE 640,512,90:CIRCLE 640,512,350',
-        '70 FOR T%=1 TO 10:FOR D%=1 TO 2500:NEXT',
+        '70 FOR T%=1 TO 10:PLOT 210,180+(T%*6),&EF:FOR D%=1 TO 2500:NEXT',
         '80 C%=?&A027:B%=?&A028',
         '90 ?&A020=15:BX%=?&A021+(?&A022*256):BY%=?&A023+(?&A024*256)',
         '100 GCOL 0,(T%*29) OR 3:GLINE 640,512,BX%,BY%:CIRCLE BX%,BY%,36',
@@ -55,10 +80,11 @@ DEMOS = {
     ],
     "VUURWERK": [
         '10 CLS:CLG:*BG ON',
-        '20 COLOUR 3:PRINT "=== FULLSCREEN MINIGPU + 16 SPRITES VUURWERK ==="',
+        '20 COLOUR 3:PRINT "=== FULLSCREEN MINIGPU + HDMI GELUID VUURWERK ==="',
         '30 FOR B%=1 TO 6',
         '40 X%=200+RND(880):Y%=180+RND(660):C%=RND(254)+1',
         '50 COLOUR (B% AND 6)+1:PRINT "Vuurbom #";B%;" op (";X%;",";Y%;")!"',
+        '55 PLOT 210,90+(B%*15),&9F:PLOT 213,18+(B%*4),&8F',
         '60 FOR R%=20 TO 180 STEP 32',
         '70 GCOL 0,C%+R%:CIRCLE X%,Y%,R%',
         '80 GLINE X%-R%,Y%,X%+R%,Y%:GLINE X%,Y%-R%,X%,Y%+R%',
@@ -78,7 +104,7 @@ DEMOS = {
         '80 GCOL 0,3:GLINE 640,512,X%,Y%',
         '90 ?&A021=X% AND 255:?&A022=X% DIV 256',
         '100 ?&A023=Y% AND 255:?&A024=Y% DIV 256',
-        '110 ?&A002=12',
+        '110 PLOT 210,120+(S%*4),&CC:?&A002=12',
         '120 PRINT "Radar sweep ";S%+1;"/16 | TIME = ";TIME;" cs"',
         '130 GCOL 0,192:CIRCLE X%,Y%,16:NEXT',
         '140 *BG ON',
@@ -93,8 +119,9 @@ DEMOS = {
         '70 GCOL 0,199:GLINE 0,Y%,1279,Y%:NEXT',
         '80 FOR X%=0 TO 1279 STEP 80',
         '90 GCOL 0,59:GLINE 640,520,X%,20:NEXT',
-        '100 COLOUR 3:PRINT "16 Multi-Color Aliens + 64x64 Boss botsen live!"',
+        '100 COLOUR 3:PRINT "16 Multi-Color Aliens + 64x64 Boss + HDMI Audio SFX!"',
         '110 FOR K%=0 TO 15:?&A020=K%:?(&2D0+K%)=(K%*19) OR &1A:NEXT',
+        '115 ?&A030=120:?&A031=150:?&A034=&8E:?&A035=&8E',
         '120 COLOUR 2:PRINT "Hardware Collision Teller ($A028): ";?&A028',
     ],
 }
@@ -102,11 +129,11 @@ DEMOS = {
 README2_TXT = (
     "=== WELKOM OP DRIVE 2 (DEMO DISK) ===\r"
     "Start met CHAIN \"NAAM\":\r"
-    " 1. CHAIN \"ALIENWAR\"  -> Boss+Botsing!\r"
-    " 2. CHAIN \"MULTITASK\" -> IRQ + 3D GPU\r"
-    " 3. CHAIN \"VUURWERK\"  -> Vuurwerk!\r"
-    " 4. CHAIN \"SYNTHBG\"   -> 80s Horizon\r"
-    " 5. CHAIN \"KLOK\" / \"BENCHMARK\""
+    "1. CHIPTUNE  -> 4-Ch HDMI Audio!\r"
+    "2. ALIENWAR  -> Boss+Botsing!\r"
+    "3. VUURWERK  -> Vuurwerk+Geluid\r"
+    "4. MULTITASK -> IRQ + 3D GPU\r"
+    "5. SYNTHBG / KLOK / BENCHMARK"
 )
 
 def send_cmd(s, cmd, wait=0.4):
@@ -121,18 +148,13 @@ def main():
     time.sleep(0.3)
     s.read_all()
 
-    # Schoon eventuele dubbele Drive 2 bestanden op Drive 0 op
-    send_cmd(s, "*SD", 0.5)
-    send_cmd(s, "*DRIVE 0", 0.5)
-    for dup in ["BENCHMARK", "MULTITASK", "VUURWERK", "KLOK", "SYNTHBG", "README2.TXT"]:
-        send_cmd(s, f"*DELETE {dup}", 0.5)
-
     print("=== Overschakelen naar MicroSD Drive 2 (*SD & *DRIVE 2) ===")
     print(send_cmd(s, "*BG OFF", 0.4).strip())
+    print(send_cmd(s, "*SD", 0.5).strip())
     print(send_cmd(s, "*DRIVE 2", 0.6).strip())
     print(send_cmd(s, "*WIPE", 1.2).strip())
 
-    # Upload alle 6 Fullscreen BBC BASIC + 6502/GPU Demo's naar Drive 2
+    # Upload alle 7 Fullscreen BBC BASIC + HDMI Sound + MiniGPU Demo's naar Drive 2
     for name, lines in DEMOS.items():
         print(f"\nUploaden van {name} naar Drive 2...")
         send_cmd(s, "NEW", 0.2)
@@ -154,11 +176,11 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live de nieuwe ALIENWAR + alle demo's en eindig met SYNTHBG!
+    # Draai nu live CHIPTUNE, ALIENWAR, VUURWERK en eindig met SYNTHBG!
     for demo, wait_s in [
+        ("CHIPTUNE", 4.5),
         ("ALIENWAR", 3.5),
         ("VUURWERK", 3.0),
-        ("MULTITASK", 2.5),
         ("SYNTHBG", 1.8),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")

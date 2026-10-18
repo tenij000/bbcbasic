@@ -89,7 +89,7 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 </tr>
 <tr>
 <td class="label">Created Time</td>
-<td>Sun Oct 18 04:08:32 2026
+<td>Sun Oct 18 04:42:24 2026
 </td>
 </tr>
 <tr>
@@ -161,7 +161,7 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 <table class="summary_table">
 <tr>
 <td class="label">Total Power (mW)</td>
-<td>270.818</td>
+<td>272.767</td>
 </tr>
 <tr>
 <td class="label">Quiescent Power (mW)</td>
@@ -169,14 +169,14 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 </tr>
 <tr>
 <td class="label">Dynamic Power (mW)</td>
-<td>148.018</td>
+<td>149.967</td>
 </tr>
 </table>
 <h2><a name="Thermal_Info">Thermal Information:</a></h2>
 <table class="summary_table">
 <tr>
 <td class="label">Junction Temperature</td>
-<td>33.081</td>
+<td>33.139</td>
 </tr>
 <tr>
 <td class="label">Theta JA</td>
@@ -184,7 +184,7 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 </tr>
 <tr>
 <td class="label">Max Allowed Ambient Temperature</td>
-<td>76.919</td>
+<td>76.861</td>
 </tr>
 </table>
 <h2><a name="Supply_Summary">Supply Information:</a></h2>
@@ -199,9 +199,9 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 <tr>
 <td>VCC</td>
 <td>1.000</td>
-<td>108.976</td>
+<td>110.926</td>
 <td>70.000</td>
-<td>178.976</td>
+<td>180.926</td>
 </tr>
 <tr>
 <td>VCCX</td>
@@ -229,9 +229,9 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 </tr>
 <tr>
 <td>Logic</td>
-<td>11.471</td>
+<td>13.421</td>
 <td>NA</td>
-<td>6.000</td>
+<td>6.133</td>
 </tr>
 <tr>
 <td>IO</td>
@@ -255,7 +255,7 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 <td>DSP</td>
 <td>3.827
 <td>NA</td>
-<td>1.587
+<td>1.657
 </tr>
 </table>
 <h2><a name="By_Hierarchy">Power By Hierarchy:</a></h2>
@@ -267,72 +267,84 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 </tr>
 <tr>
 <td>top</td>
-<td>102.865</td>
-<td>102.865(84.413)</td>
+<td>104.815</td>
+<td>104.815(85.323)</td>
 <tr>
 <td>top/cpu_inst/</td>
-<td>0.274</td>
-<td>0.274(0.046)</td>
+<td>0.266</td>
+<td>0.266(0.042)</td>
 <tr>
 <td>top/cpu_inst/ALU/</td>
-<td>0.046</td>
-<td>0.046(0.000)</td>
+<td>0.042</td>
+<td>0.042(0.000)</td>
 <tr>
 <td>top/fb_inst/</td>
-<td>12.679</td>
-<td>12.679(0.162)</td>
+<td>12.699</td>
+<td>12.699(0.161)</td>
 <tr>
 <td>top/fb_inst/sdram_inst/</td>
-<td>0.162</td>
-<td>0.162(0.000)</td>
+<td>0.161</td>
+<td>0.161(0.000)</td>
 <tr>
 <td>top/gpu_inst/</td>
-<td>2.298</td>
-<td>2.298(0.000)</td>
+<td>2.295</td>
+<td>2.295(0.000)</td>
 <tr>
 <td>top/hdmi_inst/</td>
-<td>0.413</td>
-<td>0.413(0.360)</td>
+<td>1.299</td>
+<td>1.299(1.222)</td>
 <tr>
 <td>top/hdmi_inst/tmds_gen[0].tmds_channel/</td>
+<td>0.138</td>
+<td>0.138(0.000)</td>
+<tr>
+<td>top/hdmi_inst/tmds_gen[1].tmds_channel/</td>
+<td>0.134</td>
+<td>0.134(0.000)</td>
+<tr>
+<td>top/hdmi_inst/tmds_gen[2].tmds_channel/</td>
 <td>0.123</td>
 <td>0.123(0.000)</td>
 <tr>
-<td>top/hdmi_inst/tmds_gen[1].tmds_channel/</td>
-<td>0.120</td>
-<td>0.120(0.000)</td>
+<td>top/hdmi_inst/true_hdmi_output.packet_assembler/</td>
+<td>0.291</td>
+<td>0.291(0.000)</td>
 <tr>
-<td>top/hdmi_inst/tmds_gen[2].tmds_channel/</td>
-<td>0.118</td>
-<td>0.118(0.000)</td>
+<td>top/hdmi_inst/true_hdmi_output.packet_picker/</td>
+<td>0.536</td>
+<td>0.536(0.140)</td>
+<tr>
+<td>top/hdmi_inst/true_hdmi_output.packet_picker/audio_clock_regeneration_packet/</td>
+<td>0.140</td>
+<td>0.140(0.000)</td>
 <tr>
 <td>top/parser_inst/</td>
-<td>0.148</td>
-<td>0.148(0.000)</td>
+<td>0.154</td>
+<td>0.154(0.000)</td>
 <tr>
 <td>top/pll_hdmi/</td>
 <td>38.834</td>
 <td>38.834(0.000)</td>
 <tr>
 <td>top/ps2_inst/</td>
-<td>0.059</td>
-<td>0.059(0.000)</td>
+<td>0.061</td>
+<td>0.061(0.000)</td>
 <tr>
 <td>top/sd_spi_inst/</td>
-<td>0.017</td>
-<td>0.017(0.000)</td>
+<td>0.016</td>
+<td>0.016(0.000)</td>
 <tr>
 <td>top/term_inst/</td>
-<td>22.148</td>
-<td>22.148(0.000)</td>
+<td>22.156</td>
+<td>22.156(0.000)</td>
 <tr>
 <td>top/uart_inst/</td>
 <td>0.023</td>
 <td>0.023(0.000)</td>
 <tr>
 <td>top/uart_tx_inst/</td>
-<td>7.520</td>
-<td>7.520(0.000)</td>
+<td>7.521</td>
+<td>7.521(0.000)</td>
 </table>
 <h2><a name="By_Clock_Domain">Power By Clock Domain:</a></h2>
 <table class="detail_table">
@@ -344,12 +356,12 @@ table.detail_table th.label {  min-width: 8%; width: 8%; }
 <tr>
 <td>sys_clk</td>
 <td>27.000</td>
-<td>66.243</td>
+<td>66.627</td>
 </tr>
 <tr>
 <td>div5/CLKOUT.default_gen_clk</td>
 <td>74.250</td>
-<td>36.650</td>
+<td>38.216</td>
 </tr>
 <tr>
 <td>NO CLOCK DOMAIN</td>

@@ -53,6 +53,10 @@ SPR_COLL     = $A027
 SPR_BOUNCES  = $A028
 SPR_ATTR     = $A029
 
+SND_FREQ0    = $A030
+SND_VOL0     = $A034
+SND_CTRL     = $A038
+
 FILE_BUF    = $7A00     ; 512-byte stream buffer for OPENIN / OPENOUT
 SD_BUF      = $7C00     ; 512-byte directory / sector buffer
 
@@ -1496,18 +1500,16 @@ endmacro
    RTS
 
 .msg_help1
-   EQUS "=== SBC02 SD-MOS 1.30 COMMANDO'S ===", $0D
-   EQUS "  *CAT / *INFO [NAAM]  Catalogus & Grootte", $0D
-   EQUS "  *DRIVE 0..3          Kies Floppy Drive 0-3", $0D
-   EQUS "  *SD / *SDRAM         MicroSD of 4MB SDRAM", $0D
-   EQUS "  *RUN / *BLOAD / *BSAVE <NAAM> ($6000 ASM)", $0D, 0
+   EQUS "=== SBC02 SD-MOS 1.40 + HDMI AUDIO ===", $0D
+   EQUS " *CAT / *INFO [NAAM] Catalogus & Grootte", $0D
+   EQUS " *DRIVE 0..3         Floppy Drive 0-3", $0D
+   EQUS " *SD / *SDRAM        MicroSD / 4MB SDRAM", $0D
+   EQUS " *RUN/*BLOAD/*BSAVE  6502 ASM op $6000", $0D, 0
 .msg_help2
-   EQUS "  *COPY <NAAM>         Kopieer SD <-> SDRAM", $0D
-   EQUS "  *DELETE / *RENAME    Wis of hernoem file", $0D
-   EQUS "  *TYPE <NAAM>         Toon tekstbestand", $0D
-   EQUS "  *DUMP [HEX]          Hex+ASCII dump", $0D
-   EQUS "  *BG ON / *BG OFF     16 Sprites Multitask!", $0D
-   EQUS "  *WIPE                Formatteer drive", $0D, 0
+   EQUS " *COPY/*DELETE/*RENAME/*WIPE Bestanden", $0D
+   EQUS " *TYPE <NAAM> / *DUMP [HEX]  Tekst/RAM", $0D
+   EQUS " *BG ON / *BG OFF    16 Sprites + SFX!", $0D
+   EQUS " PLOT 210..213,P,V   4-Ch HDMI Sound!", $0D, 0
 
 .cli_s_cmd
    ; *SDRAM or *SD: check 3rd letter (after 'S','D')
@@ -1558,7 +1560,19 @@ endmacro
    BEQ cli_bg_off
    LDA $0601
    CMP #'F'
-   BEQ cli_bg_off
+   BNE bg_do_on
+.cli_bg_off
+   LDA #$80
+   STA SND_CTRL              ; Demp alle kanalen & zet SFX uit bij *BG OFF
+   LDA #$00
+   LDX #$0F
+.bg_off_lp
+   STX SPR_SEL
+   STA SPR_ACT
+   DEX
+   BPL bg_off_lp
+   BMI bg_set_mode
+.bg_do_on
    LDX #$0F
 .bg_init_lp
    STX SPR_SEL
@@ -1607,17 +1621,13 @@ endmacro
    STA bg_dir,X
    DEX
    BPL bg_init_lp
+   LDA #150
+   STA SND_FREQ0
+   LDA #$9F
+   STA SND_VOL0              ; Speel vrolijke power-up fanfare bij *BG ON!
    LDA #$01
+   STA SND_CTRL              ; Zet Hardware Sprite Botsings-SFX AAN
    STA bg_prescale
-   BNE bg_set_mode
-.cli_bg_off
-   LDA #$00
-   LDX #$0F
-.bg_off_lp
-   STX SPR_SEL
-   STA SPR_ACT
-   DEX
-   BPL bg_off_lp
 .bg_set_mode
    STA bg_mode
    LDX #$00
@@ -1742,6 +1752,20 @@ endmacro
    PHA
    STX pblock
    STY pblock+1
+   CMP #$07
+   BNE not_osw_snd
+   LDY #$00
+   LDA (pblock),Y
+   AND #$03
+   TAX
+   LDY #$04
+   LDA (pblock),Y
+   STA SND_FREQ0,X
+   LDY #$02
+   LDA (pblock),Y
+   STA SND_VOL0,X
+   JMP osword_exit
+.not_osw_snd
    TAY
    BEQ osword_readline
    DEY
@@ -2014,8 +2038,7 @@ ENDIF
 
 .reset_msg
    EQUB $0D
-   EQUS "SBC02 "
-   EQUS GITVERSION
+   EQUS "SBC02 SD-MOS 1.40 / BBC BASIC"
    EQUB $0A, $0D
 IF USE_XON_XOFF = 1
    EQUB $11

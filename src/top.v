@@ -254,6 +254,12 @@ module top(
     reg [11:0] sprite_y_reg [0:15];
     reg        sprite_active_reg [0:15];
     reg [7:0]  sprite_attr_reg [0:15];
+
+    // --- 4-Channel 1980s Retro PSG & Hardware Envelope Registers ($A030 - $A038) ---
+    reg [7:0]  snd_freq [0:3];
+    reg [7:0]  snd_vol  [0:3];
+    reg [7:0]  snd_ctrl = 8'h01; // Bit 0 = Hardware Sprite Bounce/Hit Arcade SFX (ON by default)
+    reg [2:0]  env_div  = 3'd0;
     
     always @(posedge sys_clk) begin
         rd_ack_sync <= {rd_ack_sync[1:0], rd_ack_toggle};
@@ -358,6 +364,12 @@ module top(
                 cpu_di <= sp_bounce_cnt;
             end else if (cpu_ab == 16'hA029) begin
                 cpu_di <= sprite_attr_reg[spr_sel];
+            end else if (cpu_ab >= 16'hA030 && cpu_ab <= 16'hA033) begin
+                cpu_di <= snd_freq[cpu_ab[1:0]];
+            end else if (cpu_ab >= 16'hA034 && cpu_ab <= 16'hA037) begin
+                cpu_di <= snd_vol[cpu_ab[1:0]];
+            end else if (cpu_ab == 16'hA038) begin
+                cpu_di <= {3'b000, snd_ctrl[0], (snd_vol[3][3:0] != 4'd0), (snd_vol[2][3:0] != 4'd0), (snd_vol[1][3:0] != 4'd0), (snd_vol[0][3:0] != 4'd0)};
             end else if (cpu_ab >= 16'hB000 && cpu_ab < 16'hC000) begin
                 cpu_di <= mos_rom[cpu_ab[11:0]]; // B000-BFFF is 4KB Extended MOS ROM
             end else if (cpu_ab >= 16'hC000) begin
@@ -389,6 +401,10 @@ module top(
     wire [7:0]  sprite_waddr;
     wire [7:0]  sprite_wdata;
     wire        sprite_we;
+    wire [1:0]  vdu_snd_ch;
+    wire [7:0]  vdu_snd_pitch;
+    wire [7:0]  vdu_snd_vol;
+    wire        vdu_snd_we;
 
     vdu_parser parser_inst (
         .clk(sys_clk),
@@ -412,7 +428,11 @@ module top(
         .sprite_active_we(sprite_active_we),
         .sprite_waddr(sprite_waddr),
         .sprite_wdata(sprite_wdata),
-        .sprite_we(sprite_we)
+        .sprite_we(sprite_we),
+        .snd_ch(vdu_snd_ch),
+        .snd_pitch(vdu_snd_pitch),
+        .snd_vol(vdu_snd_vol),
+        .snd_we(vdu_snd_we)
     );
     
     // Cross sys_clk -> hclk domain for start pulse
@@ -496,6 +516,7 @@ module top(
     // --- Terminal Module ---
     wire [23:0] rgb_term;
     wire term_active;
+    wire bell_trig;
 
     terminal term_inst (
         .clk_pixel(hclk),
@@ -507,7 +528,8 @@ module top(
         .cy(cy),
         .term_rgb(rgb_term),
         .term_active(term_active),
-        .term_busy(term_busy)
+        .term_busy(term_busy),
+        .bell_trig(bell_trig)
     );
     
     // --- Hardware Sprite Rendering & Collision Physics (16 Sprites) ---
@@ -546,7 +568,7 @@ module top(
     wire eff_dir_x = sp_peer_hit ? sp_peer_left  : cpu_do[7];
     wire eff_dir_y = sp_peer_hit ? sp_peer_below : cpu_do[6];
 
-    integer i;
+    integer i, s_idx;
     always @(posedge sys_clk) begin
         if (reset) begin
             spr_sel       <= 0;
@@ -559,7 +581,54 @@ module top(
                 sprite_active_reg[i] <= 0;
                 sprite_attr_reg[i]   <= 0;
             end
+            // Classic 1981 Acorn BBC Micro Power-On Boot Beep on Channel 0!
+            snd_freq[0] <= 8'd200; // 880 Hz (A5)
+            snd_vol[0]  <= 8'h8D;  // Vol 13 + Smooth Auto-Decay
+            snd_freq[1] <= 8'd0;
+            snd_vol[1]  <= 8'd0;
+            snd_freq[2] <= 8'd0;
+            snd_vol[2]  <= 8'd0;
+            snd_freq[3] <= 8'd0;
+            snd_vol[3]  <= 8'd0;
+            snd_ctrl    <= 8'h01;  // Enable Sprite Bounce/Hit Arcade SFX by default
+            env_div     <= 3'd0;
         end else begin
+            // 100 Hz Hardware Envelope & Pitch-Sweep Engine
+            if (sys_timer_cnt == 19'd269_999) begin
+                env_div <= (env_div == 3'd5) ? 3'd0 : (env_div + 3'd1);
+                for (s_idx = 0; s_idx < 4; s_idx = s_idx + 1) begin
+                    if (snd_vol[s_idx][3:0] != 4'd0) begin
+                        // Pitch Sweep Down (bit 5 = Laser Zap) or Up (bit 4 = Jump/Coin)
+                        if (snd_vol[s_idx][5]) begin
+                            if (snd_freq[s_idx] > 8'd10)
+                                snd_freq[s_idx] <= snd_freq[s_idx] - 8'd5;
+                            else
+                                snd_vol[s_idx][3:0] <= 4'd0;
+                        end else if (snd_vol[s_idx][4]) begin
+                            if (snd_freq[s_idx] < 8'd245)
+                                snd_freq[s_idx] <= snd_freq[s_idx] + 8'd5;
+                        end
+                        // Volume Auto-Decay (bit 7 = Decay Enable, bit 6 = Fast Decay)
+                        if (snd_vol[s_idx][7]) begin
+                            if ((snd_vol[s_idx][6] && env_div[0]) || (env_div == 3'd5))
+                                snd_vol[s_idx][3:0] <= snd_vol[s_idx][3:0] - 4'd1;
+                        end
+                    end
+                end
+            end
+
+            // VDU 7 (CHR$(7) Bell) Trigger from Terminal
+            if (bell_trig) begin
+                snd_freq[0] <= 8'd200; // 880 Hz BBC Micro Bell
+                snd_vol[0]  <= 8'h8E;  // Vol 14 + Auto-Decay
+            end
+
+            // PLOT 210..213, Pitch, Vol_Env Trigger from VDU Parser
+            if (vdu_snd_we) begin
+                snd_freq[vdu_snd_ch] <= vdu_snd_pitch;
+                snd_vol[vdu_snd_ch]  <= vdu_snd_vol;
+            end
+
             // Clear Sprite 0 collision latch on CPU read of $A027
             if (cpu_rdy && !cpu_we && cpu_ab == 16'hA027) begin
                 sp0_coll_reg <= 0;
@@ -592,8 +661,21 @@ module top(
                         if (cpu_do[5:0] == 6'd0) begin
                             spr_dir_out[7:6] <= cpu_do[7:6];
                         end else begin
-                            if (sp_peer_hit)
+                            if (sp_peer_hit) begin
                                 sp_bounce_cnt <= sp_bounce_cnt + 8'd1;
+                                // Hardware Arcade Sound Effects on Sprite Collisions (when snd_ctrl[0]=1)
+                                if (snd_ctrl[0]) begin
+                                    if (spr_sel == 4'd0 || sp_peer_id == 4'd0) begin
+                                        // Player Hit! Trigger Crunchy White-Noise Explosion on Ch3
+                                        snd_freq[3] <= 8'd24;
+                                        snd_vol[3]  <= 8'h8F;
+                                    end else begin
+                                        // Alien Billiard Bounce! Trigger Arcade Laser/Boing on Ch2
+                                        snd_freq[2] <= sprite_attr_reg[spr_sel][5] ? 8'd45 : (8'd85 + {1'b0, spr_sel, 3'b000});
+                                        snd_vol[2]  <= 8'hEA;
+                                    end
+                                end
+                            end
                             // Step X with full 1280p screen & sprite-to-sprite bounce (0..1248)
                             if (!eff_dir_x) begin
                                 if (cur_sp_x + step_dx >= 12'd1248) begin
@@ -635,6 +717,17 @@ module top(
                     16'hA027: sp0_coll_reg  <= 8'd0;
                     16'hA028: sp_bounce_cnt <= cpu_do;
                     16'hA029: sprite_attr_reg[spr_sel] <= cpu_do;
+                    16'hA030, 16'hA031, 16'hA032, 16'hA033: snd_freq[cpu_ab[1:0]] <= cpu_do;
+                    16'hA034, 16'hA035, 16'hA036, 16'hA037: snd_vol[cpu_ab[1:0]]  <= cpu_do;
+                    16'hA038: begin
+                        snd_ctrl <= cpu_do;
+                        if (cpu_do[7]) begin
+                            snd_vol[0] <= 8'd0;
+                            snd_vol[1] <= 8'd0;
+                            snd_vol[2] <= 8'd0;
+                            snd_vol[3] <= 8'd0;
+                        end
+                    end
                 endcase
             end
         end
@@ -730,16 +823,86 @@ module top(
     wire [23:0] rgb_bg_or_term = (term_active && uart_mode == 0) ? rgb_term : rgb_bg;
     wire [23:0] rgb = sprite_visible ? sp_rgb : rgb_bg_or_term;
 
+    // --- 48.000 kHz HDMI Audio Synthesizer (3 Tone Channels + 1 LFSR Noise Channel) ---
+    // Exact fractional clock divider: 74.25 MHz * 8 / 12375 = 48,000.000 Hz (CTS = 74250, N = 6144)
+    reg [13:0] audio_clk_cnt = 14'd0;
+    reg        clk_audio     = 1'b0;
+    reg        audio_tick    = 1'b0;
+    reg [15:0] tone_phase [0:2];
+    reg [15:0] noise_phase   = 16'd0;
+    reg [15:0] lfsr          = 16'hACE1;
+    reg [15:0] audio_sample_l = 16'd0;
+    reg [15:0] audio_sample_r = 16'd0;
+
+    wire [6:0]  n_rate = (snd_freq[3][6:0] == 7'd0) ? 7'd16 : snd_freq[3][6:0];
+    wire [16:0] n_next = {1'b0, noise_phase} + {6'd0, n_rate, 4'b0000};
+
+    wire signed [5:0] s_ch0 = (snd_freq[0] != 8'd0 && snd_vol[0][3:0] != 4'd0) ?
+                              (tone_phase[0][15] ? $signed({2'b00, snd_vol[0][3:0]}) : -$signed({2'b00, snd_vol[0][3:0]})) : 6'sd0;
+    wire signed [5:0] s_ch1 = (snd_freq[1] != 8'd0 && snd_vol[1][3:0] != 4'd0) ?
+                              (tone_phase[1][15] ? $signed({2'b00, snd_vol[1][3:0]}) : -$signed({2'b00, snd_vol[1][3:0]})) : 6'sd0;
+    wire signed [5:0] s_ch2 = (snd_freq[2] != 8'd0 && snd_vol[2][3:0] != 4'd0) ?
+                              (tone_phase[2][15] ? $signed({2'b00, snd_vol[2][3:0]}) : -$signed({2'b00, snd_vol[2][3:0]})) : 6'sd0;
+    wire signed [5:0] s_ch3 = (snd_freq[3] != 8'd0 && snd_vol[3][3:0] != 4'd0) ?
+                              (lfsr[0]           ? $signed({2'b00, snd_vol[3][3:0]}) : -$signed({2'b00, snd_vol[3][3:0]})) : 6'sd0;
+
+    wire signed [7:0] mix_l = (s_ch0 <<< 1) + s_ch1 + s_ch2 + s_ch3;
+    wire signed [7:0] mix_r = s_ch0 + (s_ch1 <<< 1) + s_ch2 + s_ch3;
+
+    always @(posedge hclk) begin
+        if (reset) begin
+            audio_clk_cnt  <= 14'd0;
+            clk_audio      <= 1'b0;
+            audio_tick     <= 1'b0;
+            tone_phase[0]  <= 16'd0;
+            tone_phase[1]  <= 16'd0;
+            tone_phase[2]  <= 16'd0;
+            noise_phase    <= 16'd0;
+            lfsr           <= 16'hACE1;
+            audio_sample_l <= 16'd0;
+            audio_sample_r <= 16'd0;
+        end else begin
+            if (audio_clk_cnt >= 14'd12367) begin
+                audio_clk_cnt <= audio_clk_cnt - 14'd12367;
+                clk_audio     <= 1'b1;
+                audio_tick    <= 1'b1;
+            end else begin
+                audio_clk_cnt <= audio_clk_cnt + 14'd8;
+                audio_tick    <= 1'b0;
+                if (audio_clk_cnt >= 14'd6184)
+                    clk_audio <= 1'b0;
+            end
+
+            if (audio_tick) begin
+                tone_phase[0] <= (snd_freq[0] == 8'd0) ? 16'd0 : (tone_phase[0] + {6'd0, snd_freq[0], 2'b00} + {7'd0, snd_freq[0], 1'b0});
+                tone_phase[1] <= (snd_freq[1] == 8'd0) ? 16'd0 : (tone_phase[1] + {6'd0, snd_freq[1], 2'b00} + {7'd0, snd_freq[1], 1'b0});
+                tone_phase[2] <= (snd_freq[2] == 8'd0) ? 16'd0 : (tone_phase[2] + {6'd0, snd_freq[2], 2'b00} + {7'd0, snd_freq[2], 1'b0});
+                noise_phase   <= n_next[15:0];
+                if (n_next[16]) begin
+                    if (snd_freq[3][7])
+                        lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[12]};
+                    else
+                        lfsr <= {lfsr[14:0], lfsr[15] ^ lfsr[13] ^ lfsr[12] ^ lfsr[10]};
+                end
+                audio_sample_l <= {mix_l, 8'd0};
+                audio_sample_r <= {mix_r, 8'd0};
+            end
+        end
+    end
+
     hdmi #(
-        .VIDEO_ID_CODE(4), // 4 = 720p60
-        .DVI_OUTPUT(1)     // Use proper HDMI mode
+        .VIDEO_ID_CODE(4),          // 4 = 720p60 (74.25 MHz)
+        .DVI_OUTPUT(1'b0),          // True HDMI 1.4a mode with Audio Data Island Packets!
+        .VIDEO_REFRESH_RATE(60.0),  // 60.00 Hz refresh rate for exact 74.25 MHz pixel clock
+        .AUDIO_RATE(48000),         // 48.0 kHz Stereo L-PCM Audio
+        .AUDIO_BIT_WIDTH(16)
     ) hdmi_inst (
         .clk_pixel_x5(hclk5),
         .clk_pixel(hclk),
-        .clk_audio(hclk),
+        .clk_audio(clk_audio),
         .reset(reset),
         .rgb(rgb),
-        .audio_sample_word('{default:0}),
+        .audio_sample_word('{audio_sample_r, audio_sample_l}),
         .tmds(tmds_d),
         .tmds_clock(tmds_c),
         .cx(cx),

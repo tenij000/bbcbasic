@@ -24,7 +24,13 @@ module vdu_parser (
     output reg        sprite_active_we,
     output reg [7:0]  sprite_waddr,
     output reg [7:0]  sprite_wdata,
-    output reg        sprite_we
+    output reg        sprite_we,
+
+    // Hardware PSG Sound Outputs (PLOT 210..213, Pitch, Vol_Env)
+    output reg [1:0]  snd_ch,
+    output reg [7:0]  snd_pitch,
+    output reg [7:0]  snd_vol,
+    output reg        snd_we
 );
 
     reg [3:0] state;
@@ -52,11 +58,16 @@ module vdu_parser (
             sprite_waddr <= 0;
             sprite_wdata <= 0;
             sprite_we <= 0;
+            snd_ch <= 0;
+            snd_pitch <= 0;
+            snd_vol <= 0;
+            snd_we <= 0;
         end else begin
             // Clear start pulses
             sprite_we <= 0;
             sprite_pos_we <= 0;
             sprite_active_we <= 0;
+            snd_we <= 0;
             
             if (draw_start && draw_busy) begin
                 draw_start <= 0;
@@ -180,6 +191,12 @@ module vdu_parser (
                             sprite_waddr <= draw_x1[7:0];
                             sprite_wdata <= {din, yl}[7:0];
                             sprite_we <= 1;
+                        end else if (k >= 210 && k <= 213) begin
+                            // PLOT 210..213, Pitch, Vol_Env : Hardware PSG Sound Channel 0..3
+                            snd_ch    <= k - 8'd210;
+                            snd_pitch <= draw_x1[7:0];
+                            snd_vol   <= {din, yl}[7:0];
+                            snd_we    <= 1;
                         end
                     end
                     // VDU 18 (GCOL)

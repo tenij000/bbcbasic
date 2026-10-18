@@ -14,7 +14,8 @@ module terminal (
     // Output color
     output [23:0] term_rgb,
     output term_active,
-    output term_busy
+    output term_busy,
+    output reg bell_trig
 );
 
     // Font ROM (1024 bytes)
@@ -75,7 +76,9 @@ module terminal (
             skip_count <= 0;
             vdu_state <= 0;
             current_color_reg <= 4'd7;
+            bell_trig <= 0;
         end else if (clearing) begin
+            bell_trig <= 0;
             // Write space with current color
             text_ram[clear_addr] <= {4'h0, current_color_reg, 8'h20}; 
             clear_addr <= clear_addr + 1;
@@ -83,6 +86,7 @@ module terminal (
                 clearing <= 0;
             end
         end else if (clearing_line) begin
+            bell_trig <= 0;
             // Clear the newly scrolled bottom line (80 columns)
             text_ram[write_addr] <= {4'h0, current_color_reg, 8'h20};
             if (clear_x == 7'd79) begin
@@ -92,6 +96,7 @@ module terminal (
                 clear_x <= clear_x + 1;
             end
         end else begin
+            bell_trig <= 0;
             if (rx_valid) begin
                 if (skip_count > 0) begin
                     skip_count <= skip_count - 1;
@@ -118,6 +123,8 @@ module terminal (
                     skip_count <= 2;
                 end else if (rx_data == 8'h16) begin // VDU 22 (MODE)
                     skip_count <= 1;
+                end else if (rx_data == 8'h07) begin // ASCII 7 (Bell / VDU 7)
+                    bell_trig <= 1;
                 end else if (rx_data == 8'h0C) begin // ASCII 12 Form Feed -> CLEAR SCREEN
                     clearing <= 1;
                     clear_addr <= 0;

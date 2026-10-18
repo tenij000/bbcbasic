@@ -26,29 +26,45 @@ module packet_picker
 
 // Connect the current packet type's data to the output.
 logic [7:0] packet_type = 8'd0;
-logic [23:0] headers [255:0];
-logic [55:0] subs [255:0] [3:0];
-assign header = headers[packet_type];
-assign sub[0] = subs[packet_type][0];
-assign sub[1] = subs[packet_type][1];
-assign sub[2] = subs[packet_type][2];
-assign sub[3] = subs[packet_type][3];
+logic [23:0] header_1, header_2, header_130, header_131, header_132;
+logic [55:0] sub_1 [3:0];
+logic [55:0] sub_2 [3:0];
+logic [55:0] sub_130 [3:0];
+logic [55:0] sub_131 [3:0];
+logic [55:0] sub_132 [3:0];
 
-// NULL packet
-// "An HDMI Sink shall ignore bytes HB1 and HB2 of the Null Packet Header and all bytes of the Null Packet Body."
-`ifdef MODEL_TECH
-assign headers[0] = {8'd0, 8'd0, 8'd0}; assign subs[0] = '{56'd0, 56'd0, 56'd0, 56'd0};
-`else
-assign headers[0] = {8'dX, 8'dX, 8'd0};
-assign subs[0][0] = 56'dX;
-assign subs[0][1] = 56'dX;
-assign subs[0][2] = 56'dX;
-assign subs[0][3] = 56'dX;
-`endif
+always_comb begin
+    case (packet_type)
+        8'd1: begin
+            header = header_1;
+            sub[0] = sub_1[0]; sub[1] = sub_1[1]; sub[2] = sub_1[2]; sub[3] = sub_1[3];
+        end
+        8'd2: begin
+            header = header_2;
+            sub[0] = sub_2[0]; sub[1] = sub_2[1]; sub[2] = sub_2[2]; sub[3] = sub_2[3];
+        end
+        8'h82: begin
+            header = header_130;
+            sub[0] = sub_130[0]; sub[1] = sub_130[1]; sub[2] = sub_130[2]; sub[3] = sub_130[3];
+        end
+        8'h83: begin
+            header = header_131;
+            sub[0] = sub_131[0]; sub[1] = sub_131[1]; sub[2] = sub_131[2]; sub[3] = sub_131[3];
+        end
+        8'h84: begin
+            header = header_132;
+            sub[0] = sub_132[0]; sub[1] = sub_132[1]; sub[2] = sub_132[2]; sub[3] = sub_132[3];
+        end
+        default: begin
+            header = 24'd0;
+            sub[0] = 56'd0; sub[1] = 56'd0; sub[2] = 56'd0; sub[3] = 56'd0;
+        end
+    endcase
+end
 
 // Audio Clock Regeneration Packet
 logic clk_audio_counter_wrap;
-audio_clock_regeneration_packet #(.VIDEO_RATE(VIDEO_RATE), .AUDIO_RATE(AUDIO_RATE)) audio_clock_regeneration_packet (.clk_pixel(clk_pixel), .clk_audio(clk_audio), .clk_audio_counter_wrap(clk_audio_counter_wrap), .header(headers[1]), .sub(subs[1]));
+audio_clock_regeneration_packet #(.VIDEO_RATE(VIDEO_RATE), .AUDIO_RATE(AUDIO_RATE)) audio_clock_regeneration_packet (.clk_pixel(clk_pixel), .clk_audio(clk_audio), .clk_audio_counter_wrap(clk_audio_counter_wrap), .header(header_1), .sub(sub_1));
 
 // Audio Sample packet
 localparam bit [3:0] SAMPLING_FREQUENCY = AUDIO_RATE == 32000 ? 4'b0011
@@ -58,14 +74,14 @@ localparam bit [3:0] SAMPLING_FREQUENCY = AUDIO_RATE == 32000 ? 4'b0011
     : AUDIO_RATE == 48000 ? 4'b0010
     : AUDIO_RATE == 96000 ? 4'b1010
     : AUDIO_RATE == 192000 ? 4'b1110
-    : 4'bXXXX;
+    : 4'b0010;
 localparam int AUDIO_BIT_WIDTH_COMPARATOR = AUDIO_BIT_WIDTH < 20 ? 20 : AUDIO_BIT_WIDTH == 20 ? 25 : AUDIO_BIT_WIDTH < 24 ? 24 : AUDIO_BIT_WIDTH == 24 ? 29 : -1;
 localparam bit [2:0] WORD_LENGTH = 3'(AUDIO_BIT_WIDTH_COMPARATOR - AUDIO_BIT_WIDTH);
 localparam bit WORD_LENGTH_LIMIT = AUDIO_BIT_WIDTH <= 20 ? 1'b0 : 1'b1;
 
 logic [AUDIO_BIT_WIDTH-1:0] audio_sample_word_transfer [1:0];
 logic audio_sample_word_transfer_control = 1'd0;
-logic clk_audio_old;
+logic clk_audio_old = 1'b0;
 always_ff @(posedge clk_pixel)
 begin
     clk_audio_old <= clk_audio;
@@ -115,7 +131,7 @@ begin
 end
 
 logic [23:0] audio_sample_word_packet [3:0] [1:0];
-logic [3:0] audio_sample_word_present_packet;
+logic [3:0] audio_sample_word_present_packet = 4'b0000;
 
 logic [7:0] frame_counter = 8'd0;
 int k;
@@ -132,19 +148,19 @@ begin
             frame_counter = frame_counter - 8'd192;
     end
 end
-audio_sample_packet #(.SAMPLING_FREQUENCY(SAMPLING_FREQUENCY), .WORD_LENGTH({{WORD_LENGTH[0], WORD_LENGTH[1], WORD_LENGTH[2]}, WORD_LENGTH_LIMIT})) audio_sample_packet (.frame_counter(frame_counter), .valid_bit('{2'b00, 2'b00, 2'b00, 2'b00}), .user_data_bit('{2'b00, 2'b00, 2'b00, 2'b00}), .audio_sample_word(audio_sample_word_packet), .audio_sample_word_present(audio_sample_word_present_packet), .header(headers[2]), .sub(subs[2]));
+audio_sample_packet #(.SAMPLING_FREQUENCY(SAMPLING_FREQUENCY), .WORD_LENGTH({{WORD_LENGTH[0], WORD_LENGTH[1], WORD_LENGTH[2]}, WORD_LENGTH_LIMIT})) audio_sample_packet (.frame_counter(frame_counter), .valid_bit('{2'b00, 2'b00, 2'b00, 2'b00}), .user_data_bit('{2'b00, 2'b00, 2'b00, 2'b00}), .audio_sample_word(audio_sample_word_packet), .audio_sample_word_present(audio_sample_word_present_packet), .header(header_2), .sub(sub_2));
 
 
 auxiliary_video_information_info_frame #(
     .VIDEO_ID_CODE(7'(VIDEO_ID_CODE)),
     .IT_CONTENT(IT_CONTENT)
-) auxiliary_video_information_info_frame(.header(headers[130]), .sub(subs[130]));
+) auxiliary_video_information_info_frame(.header(header_130), .sub(sub_130));
 
 
-source_product_description_info_frame #(.VENDOR_NAME(VENDOR_NAME), .PRODUCT_DESCRIPTION(PRODUCT_DESCRIPTION), .SOURCE_DEVICE_INFORMATION(SOURCE_DEVICE_INFORMATION)) source_product_description_info_frame(.header(headers[131]), .sub(subs[131]));
+source_product_description_info_frame #(.VENDOR_NAME(VENDOR_NAME), .PRODUCT_DESCRIPTION(PRODUCT_DESCRIPTION), .SOURCE_DEVICE_INFORMATION(SOURCE_DEVICE_INFORMATION)) source_product_description_info_frame(.header(header_131), .sub(sub_131));
 
 
-audio_info_frame audio_info_frame(.header(headers[132]), .sub(subs[132]));
+audio_info_frame audio_info_frame(.header(header_132), .sub(sub_132));
 
 
 // "A Source shall always transmit... [an InfoFrame] at least once per two Video Fields"
@@ -162,7 +178,7 @@ begin
         audio_info_frame_sent <= 1'b0;
         auxiliary_video_information_info_frame_sent <= 1'b0;
         source_product_description_info_frame_sent <= 1'b0;
-        packet_type <= 8'dx;
+        packet_type <= 8'd0;
     end
     else if (packet_enable)
     begin
