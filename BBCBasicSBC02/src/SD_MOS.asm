@@ -1561,16 +1561,17 @@ endmacro
    STX SPR_SEL
    TXA
    ASL A: ASL A: ASL A: ASL A
-   CLC: ADC #$20
+   ORA #$50
    STA SPR_X_LO
-   LDA #$00
-   ADC #$00
+   TXA
+   LSR A: LSR A
    STA SPR_X_HI
    TXA
    ASL A: ASL A: ASL A: ASL A
-   CLC: ADC #$28
+   ORA #$60
    STA SPR_Y_LO
-   LDA #$00
+   TXA
+   AND #$03
    STA SPR_Y_HI
    LDA #$01
    STA SPR_ACT

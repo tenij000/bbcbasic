@@ -504,8 +504,8 @@ module top(
     // --- Hardware Sprite Rendering (16 Sprites) ---
     wire [11:0] cur_sp_x = sprite_x_reg[spr_sel];
     wire [11:0] cur_sp_y = sprite_y_reg[spr_sel];
-    wire [11:0] step_dx  = {9'd0, cpu_do[5:3]};
-    wire [11:0] step_dy  = {9'd0, cpu_do[2:0]};
+    wire [11:0] step_dx  = {8'd0, cpu_do[5:3], 1'b0};
+    wire [11:0] step_dy  = {8'd0, cpu_do[2:0], 1'b0};
 
     integer i;
     always @(posedge sys_clk) begin
@@ -535,10 +535,10 @@ module top(
                     16'hA025: sprite_active_reg[spr_sel]  <= cpu_do[0];
                     16'hA026: begin
                         spr_dir_out[5:0] <= cpu_do[5:0];
-                        // Step X with 0..624 screen boundary bounce
+                        // Step X with full 1280p screen boundary bounce (0..1248)
                         if (!cpu_do[7]) begin
-                            if (cur_sp_x + step_dx >= 12'd624) begin
-                                sprite_x_reg[spr_sel] <= 12'd624;
+                            if (cur_sp_x + step_dx >= 12'd1248) begin
+                                sprite_x_reg[spr_sel] <= 12'd1248;
                                 spr_dir_out[7]        <= 1'b1;
                             end else begin
                                 sprite_x_reg[spr_sel] <= cur_sp_x + step_dx;
@@ -553,18 +553,18 @@ module top(
                                 spr_dir_out[7]        <= 1'b1;
                             end
                         end
-                        // Step Y with 0..464 screen boundary bounce
+                        // Step Y with full 1024 BBC BASIC screen boundary bounce (46..1020)
                         if (!cpu_do[6]) begin
-                            if (cur_sp_y + step_dy >= 12'd464) begin
-                                sprite_y_reg[spr_sel] <= 12'd464;
+                            if (cur_sp_y + step_dy >= 12'd1020) begin
+                                sprite_y_reg[spr_sel] <= 12'd1020;
                                 spr_dir_out[6]        <= 1'b1;
                             end else begin
                                 sprite_y_reg[spr_sel] <= cur_sp_y + step_dy;
                                 spr_dir_out[6]        <= 1'b0;
                             end
                         end else begin
-                            if (cur_sp_y <= step_dy) begin
-                                sprite_y_reg[spr_sel] <= 12'd0;
+                            if (cur_sp_y <= 12'd46 + step_dy) begin
+                                sprite_y_reg[spr_sel] <= 12'd46;
                                 spr_dir_out[6]        <= 1'b0;
                             end else begin
                                 sprite_y_reg[spr_sel] <= cur_sp_y - step_dy;
