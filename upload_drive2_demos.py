@@ -20,7 +20,7 @@ DEMOS = {
         '130 ?&A030=M%:?&A034=&8F:?&A031=H%:?&A035=&8C',
         '140 ?&A032=B%:?&A036=&CB:IF D% THEN ?&A033=D%:?&A037=&CF',
         '150 X%=80+(N%*70):GCOL 0,(N%*19) OR 3',
-        '160 RECT X%,120,48,M%*3:CIRCLE X%+24,140+M%*3,22',
+        '160 RECT X%,120,48,M%*3,1:GCOL 0,255:CIRCLE X%+24,140+M%*3,22,1',
         '170 FOR W%=1 TO 900:NEXT:NEXT',
         '180 ?&A030=120:?&A031=150:?&A032=180:?&A034=&8F:?&A035=&8F:?&A036=&8F',
         '190 COLOUR 3:PRINT "C-Majeur Finale Akkoord (120:150:180) + Live Alien SFX!"',
@@ -28,6 +28,29 @@ DEMOS = {
         '210 DATA 160,120,80,18, 200,160,80,0, 240,200,80,45, 200,160,80,0',
         '220 DATA 180,135,90,18, 225,180,90,0, 180,135,90,45, 150,112,90,0',
         '230 DATA 120,90,60,18, 150,120,60,45, 180,150,60,18, 240,180,120,24',
+    ],
+    "SOLID3D": [
+        '10 MODE 1:*BG ON',
+        '20 VDU 23,224,&3C,&7E,&F8,&F0,&F8,&7E,&3C,0',
+        '30 VDU 23,225,&3C,&7E,&DB,&FF,&FF,&FF,&AA,0',
+        '40 VDU 23,226,&18,&3C,&7E,&DB,&FF,&24,&5A,&A5',
+        '50 VDU 23,227,&18,&3C,&7E,&FF,&FF,&7E,&3C,&18',
+        '60 GCOL 0,4:RECT 0,0,1279,240,1:GCOL 0,31:GLINE 0,240,1279,240',
+        '70 GCOL 0,224:CIRCLE 640,620,220,1:GCOL 0,252:CIRCLE 640,620,165,1',
+        '80 GCOL 0,63:CIRCLE 1040,780,75,1:GCOL 0,255:CIRCLE 1040,780,115',
+        '90 GCOL 0,28:MOVE 80,240:MOVE 360,240:PLOT 85,240,640',
+        '100 GCOL 0,12:MOVE 360,240:MOVE 480,200:PLOT 85,240,640',
+        '110 GCOL 0,252:MOVE 420,200:MOVE 680,200:PLOT 85,580,700',
+        '120 GCOL 0,196:MOVE 680,200:MOVE 830,160:PLOT 85,580,700',
+        '130 GCOL 0,63:MOVE 780,240:MOVE 1080,240:PLOT 85,960,620',
+        '140 GCOL 0,19:MOVE 1080,240:MOVE 1220,190:PLOT 85,960,620',
+        '150 COLOUR 132:COLOUR 3:COLOUR 141:PRINT " === SOLID 3D GPU & VDU 23 UDG === "',
+        '160 COLOUR 132:COLOUR 3:COLOUR 141:PRINT " === SOLID 3D GPU & VDU 23 UDG === "',
+        '170 COLOUR 128:COLOUR 7:PRINT "PLOT 85=Driehoek | PLOT 101=Rechthoek | PLOT 153=Cirkel"',
+        '180 COLOUR 3:PRINT "VDU 23 Arcade UDG: ";:FOR I%=1 TO 5',
+        '190 COLOUR 3:PRINT CHR$(224);" ";:COLOUR 1:PRINT CHR$(225);" ";',
+        '200 COLOUR 2:PRINT CHR$(226);" ";:COLOUR 6:PRINT CHR$(227);" ";:NEXT:PRINT',
+        '210 PLOT 210,120,&9F:PLOT 211,150,&9F:PLOT 212,180,&9F',
     ],
     "ALIENWAR": [
         '10 CLS:CLG:*BG ON:?&A028=0:?&A027=0',
@@ -113,7 +136,7 @@ DEMOS = {
         '10 CLS:CLG:*BG ON',
         '20 COLOUR 5:PRINT "=== 1984 SYNTHWAVE HORIZON + BOSS ALIEN ==="',
         '30 GCOL 0,224:RECT 0,520,1279,400',
-        '40 GCOL 0,252:CIRCLE 640,520,180',
+        '40 GCOL 0,252:CIRCLE 640,520,180,1',
         '50 GCOL 0,31:GLINE 0,520,1279,520',
         '60 FOR Y%=60 TO 520 STEP 46',
         '70 GCOL 0,199:GLINE 0,Y%,1279,Y%:NEXT',
@@ -134,11 +157,11 @@ DEMOS = {
         '70 FOR C%=1 TO 6:COLOUR C%:PRINT S$;:NEXT:PRINT',
         '80 COLOUR 129:COLOUR 7:PRINT " NIEUWS ";:COLOUR 128:COLOUR 3:PRINT " 27MHz 6502 + 8MB SDRAM GPU! "',
         '90 COLOUR 130:COLOUR 0:PRINT " GELUID ";:COLOUR 128:COLOUR 6:PRINT " 4-Ch 48kHz Stereo HDMI PSG! "',
-        '100 COLOUR 133:COLOUR 7:PRINT " MODES  ";:COLOUR 128:COLOUR 2:PRINT " MODE 0..7 & Sixel Graphics! "',
+        '100 COLOUR 133:COLOUR 7:PRINT " SOLID  ";:COLOUR 128:COLOUR 2:PRINT " PLOT 85/101/153 & VDU 23!   "',
         '110 COLOUR 131:COLOUR 0:PRINT " SPRITE ";:COLOUR 128:COLOUR 7:PRINT " 16 Aliens + 64x64 Boss IRQ! "',
         '120 COLOUR 6:PRINT STRING$(36,CHR$(140))',
         '130 COLOUR 3:PRINT "102 ";:COLOUR 7:PRINT "Binnenland: HIMEM=&7A00 in elke MODE"',
-        '140 COLOUR 3:PRINT "201 ";:COLOUR 2:PRINT " Arcade:     MODE 1 (40x20) & MODE 2"',
+        '140 COLOUR 3:PRINT "201 ";:COLOUR 2:PRINT " Arcade:     CHAIN ";CHR$(34);"SOLID3D";CHR$(34);" (3D+UDG)"',
         '150 COLOUR 3:PRINT "701 ";:COLOUR 6:PRINT "Weerbericht: ";:COLOUR 3:PRINT CHR$(191);CHR$(191);" Zonnig 24 C"',
         '160 COLOUR 132:COLOUR 3:PRINT " 101 Nieuws  201 Sport  701 Weer  888 "',
         '170 COLOUR 128:COLOUR 7:PLOT 210,160,&8F:PLOT 211,200,&8F',
@@ -160,10 +183,10 @@ DEMOS = {
 README2_TXT = (
     "=== WELKOM OP DRIVE 2 (DEMO DISK) ===\r"
     "Start met CHAIN \"NAAM\":\r"
-    "1. TELETEKST -> MODE 7 NOS Teletekst!\r"
-    "2. MODES     -> MODE 0..7 Showcase!\r"
+    "1. SOLID3D   -> 3D Fill + VDU 23 UDG!\r"
+    "2. TELETEKST -> MODE 7 NOS Teletekst!\r"
     "3. CHIPTUNE  -> 4-Ch HDMI Audio!\r"
-    "4. ALIENWAR / VUURWERK / SYNTHBG"
+    "4. MODES / ALIENWAR / SYNTHBG"
 )
 
 def send_cmd(s, cmd, wait=0.4):
@@ -185,7 +208,7 @@ def main():
     print(send_cmd(s, "*DRIVE 2", 0.6).strip())
     print(send_cmd(s, "*WIPE", 1.2).strip())
 
-    # Upload alle Fullscreen BBC BASIC + HDMI Sound + MODE 0..7 Demo's naar Drive 2
+    # Upload alle Fullscreen BBC BASIC + HDMI Sound + MODE 0..7 + Solid3D Demo's naar Drive 2
     for name, lines in DEMOS.items():
         print(f"\nUploaden van {name} naar Drive 2...")
         send_cmd(s, "NEW", 0.2)
@@ -207,11 +230,11 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live CHIPTUNE, MODES en eindig op het prachtige MODE 7 TELETEKST scherm!
+    # Draai nu live CHIPTUNE, TELETEKST en eindig op het prachtige SOLID3D scherm!
     for demo, wait_s in [
         ("CHIPTUNE", 4.5),
-        ("MODES", 3.5),
         ("TELETEKST", 2.0),
+        ("SOLID3D", 2.5),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")
         out = send_cmd(s, f'CHAIN "{demo}"', wait_s)

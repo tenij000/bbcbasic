@@ -10,12 +10,15 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
   * Draait op de systeemklok van 27 MHz (13,5× sneller dan een originele BBC Micro en 27× sneller dan een Commodore 64).
   * Volledige hardware `RDY`-synchronisatie met de GPU, MicroSD-controller, tekst-terminal en hardware delay-timer (`$A002`).
   * Inclusief de legendarische **ingebouwde 6502 Inline Assembler** (`[ ... ]`) van BBC BASIC II.
-* **🎨 74,25 MHz 720p HDMI MiniGPU & SDRAM Framebuffer:**
-  * Volledig 64 Mbit SDRAM framebuffer met hardware-versnelde 2D-commando's rechtstreeks vanuit BBC BASIC:
-    * `GLINE X1, Y1, X2, Y2` (Bresenham hardware lijn-engine)
-    * `RECT X, Y, BREEDTE, HOOGTE` (Hardware gevulde rechthoeken)
-    * `CIRCLE X, Y, STRAAL` (Midpoint hardware cirkel-engine)
-    * `GCOL 0, KLEUR` & `CLG` (8-bit RGB332 / BBC BASIC kleurenpalet)
+* **🎨 74,25 MHz 720p HDMI MiniGPU & 3D/2D Hardware Solid Fill Engine:**
+  * Volledig 64 Mbit SDRAM framebuffer met hardware-versnelde 2D- én 3D-solid-fill commando's op 74,25 MHz rechtstreeks vanuit BBC BASIC:
+    * `GLINE X1, Y1, X2, Y2` / `PLOT 5, X, Y` (Bresenham hardware lijn-engine)
+    * `RECT X, Y, BREEDTE, HOOGTE [, 1]` & `PLOT 101, X2, Y2` (Hardware rechthoek-omtrek of **74,25 MHz Solid Filled Rectangle**!)
+    * `CIRCLE X, Y, STRAAL [, 1]` & `PLOT 153, R, 0` (Midpoint hardware cirkel-omtrek of **Solid Filled Disc / Planeet**!)
+    * `MOVE X1, Y1 : MOVE X2, Y2 : PLOT 85, X3, Y3` (**Hardware Solid Filled Triangle Engine** voor razendsnelle gevulde 3D-polygonen en piramides!)
+    * `GCOL 0, KLEUR` (standaard) / `GCOL 1, KLEUR` (auto-fill cirkels) & `CLG` (8-bit RGB332 / BBC BASIC kleurenpalet)
+* **🔤 `VDU 23` User-Defined Characters (UDG / Custom Arcade Font Designer):**
+  * Herdefinieer live vanuit BBC BASIC elk 8×8 karakter (`CHR$(224..255)` of `CHR$(32..127)`) met `VDU 23, char, b0, b1, b2, b3, b4, b5, b6, b7` voor eigen Pac-Man, Spookjes, Space Invaders, tegels en valutasymbolen in elke `MODE 0..7`!
 * **👾 16 Multi-Color Hardware Sprites (`16×16` Scouts, `32×32` Fighters & `64×64` Mega-Boss!):**
   * Onafhankelijke transparante sprite-overlay bovenop de tekst- en framebuffer-laag over het **volledige `1280×1024` (720p HDMI) scherm**.
   * **15-Kleuren Neon Arcade Palet & Schaling per Sprite (`$A029` `SPR_ATTR`):** Kies per sprite een eigen neon-kleur (`bits 3..0`) én formaat (`bits 5..4`: `00`=`32×32` standaard, `01`=`16×16` snelle Scout, `10/11`=`64×64` Mega-Boss!).
@@ -59,9 +62,9 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | **`$A010 - $A011`** | 2 B | **MicroSD Hardware SPI Controller**: Data (`$A010`), CS & Kloksnelheid (`$A011`) |
 | **`$A012 - $A015`** | 4 B | **4 MB Interne SDRAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`), Bank 0..63 (`$A015`) |
 | **`$A020 - $A026`** | 7 B | **Directe Hardware Sprite & Physics Registers**: `SPR_SEL` (`$A020`), `X/Y` (`$A021-$A024`), `ACT` (`$A025`), `SPR_STEP` (`$A026`) |
-| **`$A027 - $A029`** | 3 B | **Sprite Collision & Attribute Registers**: `SPR_COLL` (`$A027` Speler-hit), `SPR_BOUNCES` (`$A028` Botsingsteller), `SPR_ATTR` (`$A029` Schaal & 15 Neon-kleuren) |
+| **`$A027 - $A02A`** | 4 B | **Sprite Collision, Attribute & Video Mode**: `SPR_COLL` (`$A027`), `SPR_BOUNCES` (`$A028`), `SPR_ATTR` (`$A029`), `VID_MODE` (`$A02A`) |
 | **`$A030 - $A038`** | 9 B | **4-Kanaals HDMI PSG Geluidschip**: `SND_FREQ0..2` (`$A030-$A032`), `SND_NOISE` (`$A033`), `SND_VOL0..3` (`$A034-$A037` Vol+Envelope/Sweep), `SND_CTRL` (`$A038`) |
-| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.40 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
+| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.60 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
 | **`$C000 - $FFFF`** | **16 KB** | **Acorn BBC BASIC II ROM + MOS Vectoren** (`Basic2.asm` + `SBC_MOS.asm`) |
 
 ---
@@ -86,17 +89,24 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 
 ---
 
-## 🚀 Overzicht van BBC BASIC & SD-MOS 1.40 Commando's
+## 🚀 Overzicht van BBC BASIC & SD-MOS 1.60 Commando's
 
-### 1. Grafische GPU-commando's
+### 1. Grafische GPU-commando's, Hardware Solid Fill & `VDU 23` Custom Characters
 ```basic
 CLS                              : REM Wis tekstscherm (en reset hardware-scroll)
 CLG                              : REM Wis grafisch scherm (SDRAM framebuffer)
 COLOUR 2                         : REM Zet tekstkleur (0=Zwart, 1=Rood, 2=Groen, 3=Geel, 4=Blauw, 5=Magenta, 6=Cyaan, 7=Wit)
-GCOL 0, 14                       : REM Zet tekenkleur voor de GPU
+GCOL 0, 14                       : REM Zet tekenkleur voor de GPU (GCOL 1, c = auto-fill cirkels)
 GLINE 100, 100, 500, 400         : REM Teken een hardware-lijn van (100,100) naar (500,400)
-RECT 300, 150, 400, 250          : REM Teken een gevulde rechthoek op (300,150) van 400x250 pixels
-CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) met straal 150
+RECT 300, 150, 400, 250          : REM Teken een rechthoek-omtrek op (300,150) van 400x250
+RECT 300, 150, 400, 250, 1       : REM Teken een HARDWARE GEVULDE rechthoek (74,25 MHz burst!)
+MOVE 300, 150 : PLOT 101, 700, 400 : REM BBC BASIC PLOT 101: Hardware Solid Filled Rectangle
+CIRCLE 640, 512, 150             : REM Teken een cirkel-omtrek op (640,512) met straal 150
+CIRCLE 640, 512, 150, 1          : REM Teken een HARDWARE GEVULDE schijf/planeet (PLOT 198 / PLOT 153)!
+MOVE 640, 512 : PLOT 153, 150, 0 : REM BBC BASIC PLOT 153: Hardware Solid Filled Circle / Disc
+MOVE 200, 200 : MOVE 600, 200 : PLOT 85, 400, 700 : REM BBC BASIC PLOT 85: Hardware Solid Filled Triangle!
+VDU 23, 224, &3C, &7E, &F8, &F0, &F8, &7E, &3C, 0 : REM Definieer CHR$(224) als Pac-Man karakter!
+PRINT CHR$(224)                  : REM Print jouw eigen 8x8 karakter in elke MODE 0..7!
 ?&A002 = 50                      : REM Wacht exact 500 ms (50 x 10 ms) via de hardware timer
 ```
 
@@ -104,7 +114,7 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 ```basic
 SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op
 LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
-*HELP                            : REM Toon overzicht van alle ingebouwde SD-MOS 1.40 commando's
+*HELP                            : REM Toon overzicht van alle ingebouwde SD-MOS 1.60 commando's
 *CAT                             : REM Toon de catalogus (inhoudsopgave)
 *INFO                            : REM Toon slotnummer (#00..#0E), naam en exacte grootte in HEX ($XXXX B)
 *INFO EXCEL                      : REM Toon bestandsinformatie voor één specifiek bestand
@@ -140,15 +150,18 @@ Schakel naar Drive 1 met `*DRIVE 1` en start direct een van de **10 klassieke 65
 | **`*RUN EXCEL`** | `visicalc6502.asm` | 1979 | **VisiCalc / Mini-Excel 6502 Spreadsheet** (live rij-, kolom- en totaalsommen) |
 | **`*RUN MATRIX`** | `matrix6502.asm` | 1982 | **6502 Radar & Laser Vector Demo** op de 720p HDMI MiniGPU |
 
-#### 🎆 Fullscreen BBC BASIC, HDMI Audio & Multitasking Showcase op Virtuele Floppy Drive 2 (`*DRIVE 2`)
-Schakel naar Drive 2 met `*DRIVE 2` en start direct een van de **7 fullscreen (`1280×1024`) BBC BASIC + HDMI Sound + MiniGPU + 100 Hz IRQ demo's**:
+#### 🎆 Fullscreen BBC BASIC, 3D Solid Fill, Teletekst & HDMI Audio Showcase op Drive 2 (`*DRIVE 2`)
+Schakel naar Drive 2 met `*DRIVE 2` en start direct een van de **9 fullscreen (`1280×1024`) BBC BASIC + 3D Solid Fill + `VDU 23` + MODE 0..7 + HDMI Sound demo's**:
 | Commando | Beschrijving |
 | :--- | :--- |
-| **`CHAIN "CHIPTUNE"`** | **4-Kanaals 48 kHz HDMI Chiptune & SFX Synthesizer**: demonstreert Laser Zap, Power-Up, Boss-Explosie en een 4-stemmige 80s Chiptune met live GPU Equalizer! |
+| **`CHAIN "SOLID3D"`** | **3D Hardware Solid Fill & `VDU 23` Arcade UDG Showcase**: tekent 3D-geschaduwde piramides (`PLOT 85`), gevulde planeten (`CIRCLE ..., 1`), gevulde horizon (`RECT ..., 1`) én eigen `VDU 23` Pac-Man/Ghost/Invader karakters in `MODE 1`! |
+| **`CHAIN "TELETEKST"`** | **NOS Teletekst Pagina 101 (`MODE 7`)**: authentieke Teletekst-pagina met dubbele-hoogte koppen (`COLOUR 141`), gekleurde balken (`COLOUR 129..133`) en `2×3` Sixel-mozaïeken (`CHR$(191)`/`CHR$(255)`)! |
+| **`CHAIN "MODES"`** | **BBC BASIC `MODE 0..7` & Shadow Mode (`MODE 128+n`) Tour**: schakelt live tussen `MODE 2` (`20×20`), `MODE 129` (`40×20` met behoud van 3D graphics!) en `MODE 131` (`80×41` groene fosfor monitor). |
+| **`CHAIN "CHIPTUNE"`** | **4-Kanaals 48 kHz HDMI Chiptune & SFX Synthesizer**: demonstreert Laser Zap, Power-Up, Boss-Explosie en een 4-stemmige 80s Chiptune met gevulde GPU Equalizer-balken! |
 | **`CHAIN "ALIENWAR"`** | **Hardware Collision, 64×64 Boss & HDMI SFX Demo**: volgt live de `64×64` Rode Mega-Boss (`Sprite 15`), telt live alien-botsingen (`$A028`) en laat elke hit horen over HDMI! |
 | **`CHAIN "MULTITASK"`** | **100 Hz IRQ Multitasking Showcase**: draait 3 taken tegelijk (16 Multi-Color Sprites + 100 Hz 6502 teller op `$0900` + 3D MiniGPU Tunnel). |
 | **`CHAIN "VUURWERK"`** | **Fullscreen MiniGPU + HDMI Geluid Vuurwerk**: kleurrijke vuurwerk-explosies met knallende HDMI-geluidseffecten over het hele `1280×1024` scherm. |
-| **`CHAIN "SYNTHBG"`** | **1984 Synthwave Horizon + Boss Alien**: 80s neon-zon en 3D-perspectiefgrid met 16 turbo-aliens + `64×64` Mega-Boss + HDMI Audio. |
+| **`CHAIN "SYNTHBG"`** | **1984 Synthwave Horizon + Boss Alien**: gevulde 80s neon-zon en 3D-perspectiefgrid met 16 turbo-aliens + `64×64` Mega-Boss + HDMI Audio. |
 | **`CHAIN "KLOK"`** | **Fullscreen 100 Hz Hardware Klok & Radar**: 16-staps radar-sweep met sonar-pings aangedreven door de `TIME`-klok (`$A003`). |
 | **`CHAIN "BENCHMARK"`** | **27 MHz 6502 vs 1981 BBC Micro Benchmark**: meet BASIC-, 6502 machinetaal- en MiniGPU-snelheid (~15× sneller dan een BBC Micro). |
 

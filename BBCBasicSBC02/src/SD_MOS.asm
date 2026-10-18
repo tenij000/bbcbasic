@@ -136,7 +136,7 @@ endmacro
    JMP L8B9B                 \ Jump to execution loop
 
 ;; =============================================================
-;; CIRCLE X, Y, R
+;; CIRCLE X, Y, R [, FILL]
 ;; =============================================================
 .LCIRCLE
    JSR L8821                 \ Evaluate expression (X)
@@ -145,6 +145,25 @@ endmacro
    JSR L92DA                 \ Step past comma and evaluate integer (Y)
    JSR LBD94                 \ Stack integer (Y)
    JSR L92DA                 \ Step past comma and evaluate integer (R)
+   LDX #199                  \ Default PLOT 199 (outline circle)
+   JSR L8A8C                 \ Check for optional ', FILL'
+   CMP #','
+   BNE circle_nofill
+   JSR LBD94                 \ Stack integer (R)
+   JSR L92DD                 \ Evaluate FILL integer
+   LDX #199
+   LDA &2A
+   BEQ circle_pop_r
+   LDX #198                  \ PLOT 198 (hardware solid disc fill)
+.circle_pop_r
+   STX $E0
+   LDX #&2A: JSR LBE0D       \ Pop R back to &2A..&2D
+   LDX $E0
+   BNE circle_eos
+.circle_nofill
+   DEC &1B
+.circle_eos
+   STX $E0
    JSR L9852                 \ Check for end of statement
 
    \ Pop Y to &3F..&42 and X to &37..&3A
@@ -159,9 +178,9 @@ endmacro
    LDA &3F: JSR OSWRCH
    LDA &40: JSR OSWRCH
 
-   \ Send VDU 25, 199, R, 0
+   \ Send VDU 25, 199/198, R, 0
    LDA #25: JSR OSWRCH
-   LDA #199: JSR OSWRCH
+   LDA $E0: JSR OSWRCH
    JSR L9456                 \ Send R low
    LDA &2B: JSR OSWRCH       \ Send R high
    LDA #0: JSR OSWRCH        \ Y low
@@ -169,7 +188,7 @@ endmacro
    JMP L8B9B                 \ Jump to execution loop
 
 ;; =============================================================
-;; RECT X, Y, BREEDTE, HOOGTE
+;; RECT X, Y, BREEDTE, HOOGTE [, FILL]
 ;; =============================================================
 .LRECT
    JSR L8821                 \ Evaluate expression (X)
@@ -183,6 +202,21 @@ endmacro
    LDA &2A: PHA
    LDA &2B: PHA
    JSR L92DA                 \ Step past comma and evaluate integer (H)
+   LDX #0                    \ Default FILL = 0 (outline)
+   JSR L8A8C                 \ Check for optional ', FILL'
+   CMP #','
+   BNE rect_nofill
+   LDA &2A: PHA
+   LDA &2B: PHA
+   JSR L92DD                 \ Evaluate FILL integer
+   LDX &2A
+   PLA: STA &2B
+   PLA: STA &2A
+   JMP rect_eos
+.rect_nofill
+   DEC &1B
+.rect_eos
+   STX $E8
    JSR L9852                 \ Check for end of statement
 
    \ Pop W ($E4/$E5), Y1 ($E2/$E3), X1 ($E0/$E1)
@@ -203,6 +237,14 @@ endmacro
    LDA $E2: ADC &2A: STA $E6
    LDA $E3: ADC &2B: STA $E7
 
+   \ Check if hardware solid rectangle fill requested
+   LDA $E8
+   BEQ rect_outline
+   LDA #4: LDX #$E0: LDY #$E2: JSR rect_plot
+   LDA #101: LDX #$E4: LDY #$E6: JSR rect_plot
+   JMP L8B9B
+
+.rect_outline
    \ Draw 4 sides using VDU 25, 4 (Move) and VDU 25, 5 (Draw)
    LDA #4: LDX #$E0: LDY #$E2: JSR rect_plot
    LDA #5: LDX #$E4: LDY #$E2: JSR rect_plot
@@ -2041,7 +2083,7 @@ ENDIF
 
 .reset_msg
    EQUB $0D
-   EQUS "SBC02 SD-MOS 1.50 / BBC BASIC"
+   EQUS "SBC02 SD-MOS 1.60 / BBC BASIC"
    EQUB $0A, $0D
 IF USE_XON_XOFF = 1
    EQUB $11

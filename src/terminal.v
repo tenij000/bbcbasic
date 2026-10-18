@@ -82,6 +82,20 @@ module terminal (
     reg [2:0] current_bg_reg    = 3'd0; // Default to black (0)
     reg       current_bg_opaque = 1'b0; // Default to transparent overlay
 
+    // VDU 23 (User-Defined Characters / Custom Font Redefinition)
+    reg [6:0]  udg_slot   = 7'd0;
+    reg [2:0]  udg_row    = 3'd0;
+    reg [31:0] udg_active = 32'd0; // Bitmask for BBC UDG range CHR$(224..255) stored in font_rom slots 0..31
+    wire       udg_we     = (!clearing) && (!clearing_line) && rx_valid && (skip_count == 3'd0) && (vdu_state == 3'd6);
+    wire [9:0] udg_waddr  = {udg_slot, udg_row};
+    wire [7:0] udg_wdata  = {rx_data[0], rx_data[1], rx_data[2], rx_data[3], rx_data[4], rx_data[5], rx_data[6], rx_data[7]};
+
+    always @(posedge clk_sys) begin
+        if (udg_we) begin
+            font_rom[udg_waddr] <= udg_wdata;
+        end
+    end
+
     // Handle incoming characters and mode changes (clk_sys)
     always @(posedge clk_sys or negedge rst_n) begin
         if (!rst_n) begin
@@ -100,6 +114,9 @@ module terminal (
             current_bg_opaque <= 1'b0;
             cur_line_dh_top <= 1'b0;
             prev_line_dh_top <= 1'b0;
+            udg_slot <= 7'd0;
+            udg_row <= 3'd0;
+            udg_active <= 32'd0;
             bell_trig <= 0;
         end else if (clearing) begin
             bell_trig <= 0;
@@ -183,6 +200,9 @@ module terminal (
                 end else if (vdu_state == 3'd4) begin
                     // VDU 22 (MODE n): Switch BBC BASIC Screen Mode (0..7, or 128..135 overlay mode)
                     video_mode <= rx_data[2:0];
+                    if (rx_data[2:0] == 3'd7) begin
+                        udg_active <= 32'd0; // Restore full 128 Teletext Sixels on MODE 7 entry
+                    end
                     case (rx_data[2:0])
                         3'd3, 3'd6: current_color_reg <= 4'd2;  // Green Phosphor Terminal
                         3'd4:       current_color_reg <= 4'd13; // Amber/Gold Phosphor Monitor
@@ -206,12 +226,31 @@ module terminal (
                         cursor_y <= 6'd1;
                     end
                     vdu_state <= 3'd0;
+                end else if (vdu_state == 3'd5) begin
+                    // VDU 23, char, b0..b7: Select character slot
+                    if (rx_data >= 8'd224) begin
+                        udg_slot                 <= {2'b00, rx_data[4:0]};
+                        udg_active[rx_data[4:0]] <= 1'b1;
+                    end else begin
+                        udg_slot <= rx_data[6:0];
+                    end
+                    udg_row   <= 3'd0;
+                    vdu_state <= 3'd6;
+                end else if (vdu_state == 3'd6) begin
+                    // VDU 23: Receive 8 row bytes (written to font_rom via udg_we)
+                    if (udg_row == 3'd7) begin
+                        vdu_state <= 3'd0;
+                    end else begin
+                        udg_row <= udg_row + 3'd1;
+                    end
                 end else if (rx_data == 8'h1F) begin // VDU 31 (TAB x, y)
                     vdu_state <= 3'd1;
                 end else if (rx_data == 8'h11) begin // VDU 17 (COLOUR c)
                     vdu_state <= 3'd3;
                 end else if (rx_data == 8'h16) begin // VDU 22 (MODE n)
                     vdu_state <= 3'd4;
+                end else if (rx_data == 8'h17) begin // VDU 23 (User-Defined Character, 9 bytes)
+                    vdu_state <= 3'd5;
                 end else if (rx_data == 8'h19) begin // VDU 25 (PLOT k, x, y)
                     skip_count <= 3'd5;
                 end else if (rx_data == 8'h12) begin // VDU 18 (GCOL m, c)
@@ -328,12 +367,15 @@ module terminal (
     reg [2:0]  pixel_y_d1, pixel_y_d2;
     reg [1:0]  row_dh_d1;
     reg [7:0]  current_char_d2;
+    reg        is_udg_char_d2;
     reg [3:0]  char_color_d2;
     reg [3:0]  char_bg_d2;
 
-    wire [2:0] eff_pixel_y = (row_dh_d1 == 2'b01) ? {1'b0, pixel_y_d1[2:1]} :
-                             (row_dh_d1 == 2'b10) ? (3'd4 + {1'b0, pixel_y_d1[2:1]}) :
-                             pixel_y_d1;
+    wire [2:0] eff_pixel_y   = (row_dh_d1 == 2'b01) ? {1'b0, pixel_y_d1[2:1]} :
+                               (row_dh_d1 == 2'b10) ? (3'd4 + {1'b0, pixel_y_d1[2:1]}) :
+                               pixel_y_d1;
+    wire       is_udg_char   = (current_ram_data[7:5] == 3'b111) && udg_active[current_ram_data[4:0]];
+    wire [6:0] font_char_idx = is_udg_char ? {2'b00, current_ram_data[4:0]} : current_ram_data[6:0];
 
     always @(posedge clk_pixel) begin
         // Cycle 1: read character + attributes from text_ram BSRAM
@@ -345,8 +387,9 @@ module terminal (
         row_dh_d1        <= (phys_read_y < 6'd45) ? row_dh[phys_read_y] : 2'b00;
 
         // Cycle 2: read font_rom BSRAM using effective vertical pixel row
-        font_row        <= font_rom[{current_ram_data[6:0], eff_pixel_y}];
+        font_row        <= font_rom[{font_char_idx, eff_pixel_y}];
         current_char_d2 <= current_ram_data[7:0];
+        is_udg_char_d2  <= is_udg_char;
         char_color_d2   <= current_ram_data[11:8];
         char_bg_d2      <= current_ram_data[15:12];
         char_x_d2       <= char_x_d1;
@@ -355,7 +398,7 @@ module terminal (
         pixel_y_d2      <= eff_pixel_y;
     end
     
-    // Cycle 3: Extract pixel from either standard ASCII font (0..127) or 2x3 Teletext Sixel Mosaic (128..255)
+    // Cycle 3: Extract pixel from ASCII/UDG font or 2x3 Teletext Sixel Mosaic (128..255)
     wire sixel_bit = (pixel_y_d2 < 3'd3) ? (pixel_x_d2[2] ? current_char_d2[1] : current_char_d2[0]) :
                      (pixel_y_d2 < 3'd5) ? (pixel_x_d2[2] ? current_char_d2[3] : current_char_d2[2]) :
                                            (pixel_x_d2[2] ? current_char_d2[5] : current_char_d2[4]);
@@ -364,7 +407,8 @@ module terminal (
                           (pixel_y_d2 == 3'd2) || (pixel_y_d2 == 3'd4) || (pixel_y_d2 == 3'd7));
     wire sixel_pixel = sixel_bit && !sixel_sep_gap;
 
-    wire pixel_on  = current_char_d2[7] ? sixel_pixel : font_row[pixel_x_d2];
+    wire use_sixel = current_char_d2[7] && !is_udg_char_d2;
+    wire pixel_on  = use_sixel ? sixel_pixel : font_row[pixel_x_d2];
     wire is_cursor = (char_x_d2 == cursor_x) && (char_y_d2 == cursor_y) && in_scroll_region;
     wire bg_opaque = char_bg_d2[3];
 

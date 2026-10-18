@@ -192,14 +192,16 @@ module top(
     // ACIA Control Register
     reg [7:0] acia_ctrl = 0;
 
-    // --- BBC BASIC GPU Line Drawer Signals ---
-    wire signed [15:0] gpu_x0, gpu_x1;
-    wire signed [15:0] gpu_y0, gpu_y1;
+    // --- BBC BASIC GPU 2D Engine Signals ---
+    wire signed [15:0] gpu_x0, gpu_x1, gpu_x2;
+    wire signed [15:0] gpu_y0, gpu_y1, gpu_y2;
     wire [7:0]  gpu_cmd_color;
     wire gpu_start_sys;
     wire gpu_busy_sys;
     wire gpu_is_circle_sys;
     wire gpu_is_clear_sys;
+    wire gpu_is_fill_sys;
+    wire gpu_is_triangle_sys;
 
     // --- Hardware Delay Timer ---
     reg [23:0] delay_counter = 0;
@@ -418,10 +420,14 @@ module top(
         .draw_y0(gpu_y0),
         .draw_x1(gpu_x1),
         .draw_y1(gpu_y1),
+        .draw_x2(gpu_x2),
+        .draw_y2(gpu_y2),
         .draw_color(gpu_cmd_color),
         .draw_start(gpu_start_sys),
         .draw_is_circle(gpu_is_circle_sys),
         .draw_is_clear(gpu_is_clear_sys),
+        .draw_is_fill(gpu_is_fill_sys),
+        .draw_is_triangle(gpu_is_triangle_sys),
         .draw_busy(gpu_busy_sys),
         .sprite_id(sprite_id),
         .sprite_x_out(sprite_x_out),
@@ -447,8 +453,10 @@ module top(
     
     // These signals are completely stable by the time start_sync pulses, 
     // so we can safely read them directly.
-    wire gpu_is_circle_hclk = gpu_is_circle_sys;
-    wire gpu_is_clear_hclk = gpu_is_clear_sys;
+    wire gpu_is_circle_hclk   = gpu_is_circle_sys;
+    wire gpu_is_clear_hclk    = gpu_is_clear_sys;
+    wire gpu_is_fill_hclk     = gpu_is_fill_sys;
+    wire gpu_is_triangle_hclk = gpu_is_triangle_sys;
     
     wire gpu_busy_hclk;
     reg [2:0] busy_sync;
@@ -470,10 +478,14 @@ module top(
         .y0(gpu_y0),
         .x1(gpu_x1),
         .y1(gpu_y1),
+        .x2(gpu_x2),
+        .y2(gpu_y2),
         .color(gpu_cmd_color),
         .start(gpu_start_hclk),
         .is_circle(gpu_is_circle_hclk),
         .is_clear(gpu_is_clear_hclk),
+        .is_fill(gpu_is_fill_hclk),
+        .is_triangle(gpu_is_triangle_hclk),
         .busy(gpu_busy_hclk),
         .fb_x(gpu_fb_x),
         .fb_y(gpu_fb_y),
