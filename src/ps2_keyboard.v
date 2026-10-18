@@ -188,14 +188,14 @@ module ps2_keyboard (
                 //   Bit 6 ($40): Select/Weapon (C / Tab)
                 //   Bit 7 ($80): Start/Menu (Enter / Esc)
                 case (scancode)
-                    8'h75, 8'h1D:               joypad_state[0] <= ~is_break;
-                    8'h72, 8'h1B:               joypad_state[1] <= ~is_break;
-                    8'h6B, 8'h1C:               joypad_state[2] <= ~is_break;
-                    8'h74, 8'h23:               joypad_state[3] <= ~is_break;
-                    8'h29, 8'h1A, 8'h70:        joypad_state[4] <= ~is_break;
-                    8'h22, 8'h12, 8'h59, 8'h14: joypad_state[5] <= ~is_break;
-                    8'h21, 8'h0D:               joypad_state[6] <= ~is_break;
-                    8'h5A, 8'h76:               joypad_state[7] <= ~is_break;
+                    8'h75, 8'h1D, 8'h3E:                      joypad_state[0] <= ~is_break;
+                    8'h72, 8'h1B, 8'h1E:                      joypad_state[1] <= ~is_break;
+                    8'h6B, 8'h1C, 8'h25:                      joypad_state[2] <= ~is_break;
+                    8'h74, 8'h23, 8'h36:                      joypad_state[3] <= ~is_break;
+                    8'h29, 8'h1A, 8'h70, 8'h73, 8'h2E, 8'h45: joypad_state[4] <= ~is_break;
+                    8'h22, 8'h12, 8'h59, 8'h14:               joypad_state[5] <= ~is_break;
+                    8'h21, 8'h0D:                             joypad_state[6] <= ~is_break;
+                    8'h5A, 8'h76:                             joypad_state[7] <= ~is_break;
                     default: ;
                 endcase
 

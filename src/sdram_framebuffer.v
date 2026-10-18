@@ -260,12 +260,14 @@ module sdram_framebuffer (
     end
     
     wire [20:0] gpu_word_addr = (gpu_y * 160) + gpu_x[9:2];
+    reg  [20:0] rmw_word_addr = 0;
+    reg  [1:0]  rmw_byte_sel  = 0;
 
     reg [7:0] old_px;
     reg [7:0] rmw_px;
     reg [7:0] mapped_read_px;
     always @(*) begin
-        case (gpu_x[1:0])
+        case (rmw_byte_sel)
             2'b00: old_px = sdram_dout[7:0];
             2'b01: old_px = sdram_dout[15:8];
             2'b10: old_px = sdram_dout[23:16];
@@ -324,7 +326,9 @@ module sdram_framebuffer (
                         sdram_wr <= 1;
                         arb_next_state <= ARB_WRITE;
                         arb_state <= ARB_WAIT_BUSY;
-                    end else if (gpu_write) begin
+                    end else if (gpu_write && !gpu_ack) begin
+                        rmw_word_addr <= gpu_word_addr;
+                        rmw_byte_sel  <= gpu_x[1:0];
                         if (gpu_gcol_mode == 3'd0) begin
                             sdram_addr <= gpu_word_addr;
                             case (gpu_x[1:0])
@@ -398,14 +402,14 @@ module sdram_framebuffer (
                             arb_state <= ARB_IDLE;
                         end else if (gpu_gcol_mode >= 3'd6) begin
                             // *SSAVE (mode 6: Screen -> Slot) or *SLOAD (mode 7: Slot -> Screen) 32-bit word copy
-                            sdram_addr <= (gpu_gcol_mode == 3'd6) ? {1'b0, gpu_color[3:0], gpu_word_addr[15:0]} : gpu_word_addr;
+                            sdram_addr <= (gpu_gcol_mode == 3'd6) ? {1'b0, gpu_color[3:0], rmw_word_addr[15:0]} : rmw_word_addr;
                             sdram_din <= sdram_dout;
                             sdram_wstrb <= 4'b1111;
                             arb_state <= ARB_RMW_WRITE;
                         end else begin
                             // GCOL 1..4 Read-Modify-Write (OR, AND, XOR, INVERT)
-                            sdram_addr <= gpu_word_addr;
-                            case (gpu_x[1:0])
+                            sdram_addr <= rmw_word_addr;
+                            case (rmw_byte_sel)
                                 2'b00: begin sdram_wstrb <= 4'b0001; sdram_din <= {24'd0, rmw_px}; end
                                 2'b01: begin sdram_wstrb <= 4'b0010; sdram_din <= {16'd0, rmw_px, 8'd0}; end
                                 2'b10: begin sdram_wstrb <= 4'b0100; sdram_din <= {8'd0, rmw_px, 16'd0}; end

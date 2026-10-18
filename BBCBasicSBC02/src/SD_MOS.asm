@@ -1961,6 +1961,8 @@ endmacro
 .not7f
    CMP #$80                  ; OSBYTE &80 = ADVAL(0) -> Read Live Joypad ($A004)
    BNE not80
+   LDA ZP_RX_TAIL
+   STA ZP_RX_HEAD
    LDX $A004
    LDY #$00
    BEQ exit

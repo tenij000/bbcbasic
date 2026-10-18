@@ -30,7 +30,8 @@ DEMOS = {
         '230 DATA 120,90,60,18, 150,120,60,45, 180,150,60,18, 240,180,120,24',
     ],
     "SOLID3D": [
-        '10 MODE 1:*BG ON',
+        '10 *BG ON',
+        '15 MODE 1',
         '20 VDU 23,224,&3C,&7E,&F8,&F0,&F8,&7E,&3C,0',
         '30 VDU 23,225,&3C,&7E,&DB,&FF,&FF,&FF,&AA,0',
         '40 VDU 23,226,&18,&3C,&7E,&DB,&FF,&24,&5A,&A5',
@@ -44,16 +45,17 @@ DEMOS = {
         '120 GCOL 0,196:MOVE 680,200:MOVE 830,160:PLOT 85,580,700',
         '130 GCOL 0,63:MOVE 780,240:MOVE 1080,240:PLOT 85,960,620',
         '140 GCOL 0,19:MOVE 1080,240:MOVE 1220,190:PLOT 85,960,620',
-        '150 COLOUR 132:COLOUR 3:COLOUR 141:PRINT " === SOLID 3D GPU & VDU 23 UDG === "',
-        '160 COLOUR 132:COLOUR 3:COLOUR 141:PRINT " === SOLID 3D GPU & VDU 23 UDG === "',
-        '170 COLOUR 128:COLOUR 7:PRINT "PLOT 85=Driehoek | PLOT 101=Rechthoek | PLOT 153=Cirkel"',
-        '180 COLOUR 3:PRINT "VDU 23 Arcade UDG: ";:FOR I%=1 TO 5',
+        '150 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  === SOLID 3D GPU & VDU 23 UDG === "',
+        '160 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  === SOLID 3D GPU & VDU 23 UDG === "',
+        '170 COLOUR 128:COLOUR 7:PRINT "PLOT 85=Driehoek | PLOT 101=Rect"',
+        '180 COLOUR 3:PRINT "VDU 23 UDG: ";:FOR I%=1 TO 5',
         '190 COLOUR 3:PRINT CHR$(224);" ";:COLOUR 1:PRINT CHR$(225);" ";',
         '200 COLOUR 2:PRINT CHR$(226);" ";:COLOUR 6:PRINT CHR$(227);" ";:NEXT:PRINT',
         '210 PLOT 210,120,&9F:PLOT 211,150,&9F:PLOT 212,180,&9F',
     ],
     "ALIENWAR": [
-        '10 CLS:CLG:*BG ON:?&A028=0:?&A027=0',
+        '10 CLS:CLG:*BG ON',
+        '15 ?&A028=0:?&A027=0',
         '20 FOR K%=0 TO 15:?(&2D0+K%)=((K% AND 1)*192)+54:NEXT',
         '30 COLOUR 3:PRINT "=== ALIEN WAR: COLLISION, BOSS & HDMI SFX ==="',
         '40 COLOUR 6:PRINT "Sprite 15 = 64x64 Rode Mega-Boss ($A029=$21)"',
@@ -148,7 +150,8 @@ DEMOS = {
         '120 COLOUR 2:PRINT "Hardware Collision Teller ($A028): ";?&A028',
     ],
     "TELETEKST": [
-        '10 MODE 7:*BG ON',
+        '10 *BG ON',
+        '15 MODE 7',
         '20 GCOL 0,20:CIRCLE 640,420,260:GCOL 0,196:RECT 60,80,1160,860',
         '30 COLOUR 128:COLOUR 7:PRINT "P101  NOS TELETEKST   6502 MINIGPU 720P"',
         '40 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  === NOS TELETEKST 101 ===   "',
@@ -167,7 +170,8 @@ DEMOS = {
         '170 COLOUR 128:COLOUR 7:PLOT 210,160,&8F:PLOT 211,200,&8F',
     ],
     "MODES": [
-        '10 MODE 2:*BG ON',
+        '10 *BG ON',
+        '15 MODE 2',
         '20 COLOUR 129:COLOUR 3:PRINT " MODE 2: 20x20 "',
         '30 COLOUR 128:COLOUR 6:PRINT "MEGA ARCADE FONT"',
         '40 GCOL 0,252:CIRCLE 640,512,320:PLOT 210,120,&9F:?&A002=90',
@@ -179,11 +183,11 @@ DEMOS = {
         '100 COLOUR 3:PRINT "Alle 8 BBC Modes (MODE 0..7) klaar! Actieve MODE = ";?&A02A',
     ],
     "DEFENDER": [
-        '10 MODE 1:*BG ON',
-        '15 *GCLS',
+        '10 *BG ON',
+        '15 MODE 1',
         '20 VDU 23,224,24,60,126,255,255,126,60,24',
-        '30 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "   * DEFENDER: XOR + BLITTER + JOYPAD * "',
-        '40 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "   * DEFENDER: XOR + BLITTER + JOYPAD * "',
+        '30 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  * DEFENDER: XOR+BLITTER+JOYPAD *  "',
+        '40 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  * DEFENDER: XOR+BLITTER+JOYPAD *  "',
         '50 COLOUR 128:GCOL 0,4:MOVE 0,80:MOVE 0,260:PLOT 85,340,460:PLOT 85,680,220:PLOT 85,1020,480:PLOT 85,1279,180',
         '60 GCOL 0,1:CIRCLE 1000,760,95,1:GCOL 0,3:CIRCLE 1000,760,45,1',
         '70 GCOL 0,6:RECT 80,540,260,140,1:GCOL 0,2:MOVE 80,680:MOVE 210,840:PLOT 85,340,680',
@@ -219,6 +223,25 @@ def send_cmd(s, cmd, wait=0.4):
     return "".join(chr(b) for b in raw if b in (10, 13) or 32 <= b < 127)
 
 def main():
+    import cv2
+    cap = cv2.VideoCapture(1, cv2.CAP_DSHOW)
+    if cap.isOpened():
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+    def snap(fname):
+        if cap is None or not cap.isOpened():
+            return
+        frame = None
+        for _ in range(8):
+            ret, f = cap.read()
+            if ret and f is not None:
+                frame = f
+            time.sleep(0.03)
+        if frame is not None:
+            cv2.imwrite(fname, frame)
+            print(f"  [HDMI Capture] Opgeslagen: {fname}")
+
     s = serial.Serial("COM6", 115200, timeout=0.5)
     s.write(b"\x1b\r")
     time.sleep(0.3)
@@ -253,16 +276,24 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live CHIPTUNE, SOLID3D en eindig op het prachtige nieuwe DEFENDER scherm!
-    for demo, wait_s in [
-        ("SOLID3D", 2.5),
-        ("DEFENDER", 4.5),
+    # Draai nu live SOLID3D en DEFENDER en maak live HDMI snapshots!
+    for demo, wait_s, fname in [
+        ("SOLID3D", 2.5, "cam_solid3d.jpg"),
+        ("DEFENDER", 4.5, "cam_defender.jpg"),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")
         out = send_cmd(s, f'CHAIN "{demo}"', wait_s)
         print(out.strip())
+        snap(fname)
 
+    # Schakel weer terug naar Drive 3 en laat ARKANOID op het scherm staan!
+    print("\n=== Terugschakelen naar Drive 3 (*DRIVE 3) ===")
+    print(send_cmd(s, "*DRIVE 3", 0.6).strip())
+    print(send_cmd(s, 'CHAIN "ARKANOID"', 5.5).strip())
+
+    cap.release()
     s.close()
 
 if __name__ == "__main__":
     main()
+

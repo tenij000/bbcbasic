@@ -41,6 +41,7 @@ module terminal (
     reg [1:0] row_dh [0:44];
     reg       cur_line_dh_top  = 1'b0;
     reg       prev_line_dh_top = 1'b0;
+    reg       just_wrapped     = 1'b0;
 
     // Dynamic geometry based on BBC BASIC MODE (0..7):
     // MODE 0, 3       : 80x41 (16x16 px chars) - High-Res Workstation Text
@@ -114,6 +115,7 @@ module terminal (
             current_bg_opaque <= 1'b0;
             cur_line_dh_top <= 1'b0;
             prev_line_dh_top <= 1'b0;
+            just_wrapped <= 1'b0;
             udg_slot <= 7'd0;
             udg_row <= 3'd0;
             udg_active <= 32'd0;
@@ -156,6 +158,7 @@ module terminal (
                     cursor_y <= (rx_data < num_rows) ? (rx_data[5:0] + min_y) : min_y;
                     cur_line_dh_top <= 1'b0;
                     prev_line_dh_top <= 1'b0;
+                    just_wrapped <= 1'b0;
                     vdu_state <= 3'd0;
                 end else if (vdu_state == 3'd3) begin
                     // VDU 17 (COLOUR) parameter:
@@ -213,6 +216,7 @@ module terminal (
                     current_bg_opaque <= 1'b0;
                     cur_line_dh_top   <= 1'b0;
                     prev_line_dh_top  <= 1'b0;
+                    just_wrapped      <= 1'b0;
                     clearing          <= 1'b1;
                     clear_addr        <= 12'd0;
                     clearing_line     <= 1'b0;
@@ -267,30 +271,15 @@ module terminal (
                     current_bg_opaque <= 1'b0;
                     cur_line_dh_top   <= 1'b0;
                     prev_line_dh_top  <= 1'b0;
+                    just_wrapped      <= 1'b0;
                     cursor_x          <= min_x;
                     cursor_y          <= min_y;
                 end else if (rx_data == 8'h0D) begin // CR (Carriage Return)
                     cursor_x <= min_x;
                 end else if (rx_data == 8'h0A) begin // LF (Line Feed)
-                    prev_line_dh_top <= cur_line_dh_top;
-                    cur_line_dh_top  <= 1'b0;
-                    if (cursor_y >= max_y) begin
-                        cursor_y      <= max_y;
-                        scroll_offset <= (scroll_offset >= (num_rows - 6'd1)) ? 6'd0 : (scroll_offset + 6'd1);
-                        clearing_line <= 1'b1;
-                        clear_x       <= 7'd0;
+                    if (just_wrapped) begin
+                        just_wrapped <= 1'b0;
                     end else begin
-                        cursor_y <= cursor_y + 6'd1;
-                    end
-                end else if (rx_data == 8'h08) begin // Backspace
-                    if (cursor_x > min_x) cursor_x <= cursor_x - 7'd1;
-                end else begin
-                    // Write character + foreground color + background attribute to RAM
-                    text_ram[write_addr] <= {current_bg_opaque, current_bg_reg, current_color_reg, rx_data};
-                    
-                    // Advance cursor with automatic line-wrap
-                    if (cursor_x >= max_x) begin
-                        cursor_x         <= min_x;
                         prev_line_dh_top <= cur_line_dh_top;
                         cur_line_dh_top  <= 1'b0;
                         if (cursor_y >= max_y) begin
@@ -301,8 +290,31 @@ module terminal (
                         end else begin
                             cursor_y <= cursor_y + 6'd1;
                         end
+                    end
+                end else if (rx_data == 8'h08) begin // Backspace
+                    just_wrapped <= 1'b0;
+                    if (cursor_x > min_x) cursor_x <= cursor_x - 7'd1;
+                end else begin
+                    // Write character + foreground color + background attribute to RAM
+                    text_ram[write_addr] <= {current_bg_opaque, current_bg_reg, current_color_reg, rx_data};
+                    
+                    // Advance cursor with automatic line-wrap
+                    if (cursor_x >= max_x) begin
+                        cursor_x         <= min_x;
+                        prev_line_dh_top <= cur_line_dh_top;
+                        cur_line_dh_top  <= 1'b0;
+                        just_wrapped     <= 1'b1;
+                        if (cursor_y >= max_y) begin
+                            cursor_y      <= max_y;
+                            scroll_offset <= (scroll_offset >= (num_rows - 6'd1)) ? 6'd0 : (scroll_offset + 6'd1);
+                            clearing_line <= 1'b1;
+                            clear_x       <= 7'd0;
+                        end else begin
+                            cursor_y <= cursor_y + 6'd1;
+                        end
                     end else begin
-                        cursor_x <= cursor_x + 7'd1;
+                        cursor_x     <= cursor_x + 7'd1;
+                        just_wrapped <= 1'b0;
                     end
                 end
             end
