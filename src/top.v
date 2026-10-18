@@ -254,6 +254,7 @@ module top(
     reg [11:0] sprite_y_reg [0:15];
     reg        sprite_active_reg [0:15];
     reg [7:0]  sprite_attr_reg [0:15];
+    wire [2:0] video_mode;
 
     // --- 4-Channel 1980s Retro PSG & Hardware Envelope Registers ($A030 - $A038) ---
     reg [7:0]  snd_freq [0:3];
@@ -364,6 +365,8 @@ module top(
                 cpu_di <= sp_bounce_cnt;
             end else if (cpu_ab == 16'hA029) begin
                 cpu_di <= sprite_attr_reg[spr_sel];
+            end else if (cpu_ab == 16'hA02A) begin
+                cpu_di <= {5'b00000, video_mode};
             end else if (cpu_ab >= 16'hA030 && cpu_ab <= 16'hA033) begin
                 cpu_di <= snd_freq[cpu_ab[1:0]];
             end else if (cpu_ab >= 16'hA034 && cpu_ab <= 16'hA037) begin
@@ -524,6 +527,9 @@ module top(
         .rst_n(~reset),
         .rx_data(term_rx_data_cpu),
         .rx_valid(term_rx_valid_cpu),
+        .cpu_mode_in(cpu_do[2:0]),
+        .cpu_mode_we(cpu_rdy && cpu_we && (cpu_ab == 16'hA02A)),
+        .video_mode(video_mode),
         .cx(cx),
         .cy(cy),
         .term_rgb(rgb_term),

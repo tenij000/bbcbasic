@@ -124,16 +124,46 @@ DEMOS = {
         '115 ?&A030=120:?&A031=150:?&A034=&8E:?&A035=&8E',
         '120 COLOUR 2:PRINT "Hardware Collision Teller ($A028): ";?&A028',
     ],
+    "TELETEKST": [
+        '10 MODE 7:*BG ON',
+        '20 GCOL 0,20:CIRCLE 640,420,260:GCOL 0,196:RECT 60,80,1160,860',
+        '30 COLOUR 128:COLOUR 7:PRINT "P101  NOS TELETEKST   6502 MINIGPU 720P"',
+        '40 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  === NOS TELETEKST 101 ===   "',
+        '50 COLOUR 132:COLOUR 3:COLOUR 141:PRINT "  === NOS TELETEKST 101 ===   "',
+        '60 COLOUR 128:S$="":FOR I%=1 TO 5:S$=S$+CHR$(191)+CHR$(255):NEXT',
+        '70 FOR C%=1 TO 6:COLOUR C%:PRINT S$;:NEXT:PRINT',
+        '80 COLOUR 129:COLOUR 7:PRINT " NIEUWS ";:COLOUR 128:COLOUR 3:PRINT " 27MHz 6502 + 8MB SDRAM GPU! "',
+        '90 COLOUR 130:COLOUR 0:PRINT " GELUID ";:COLOUR 128:COLOUR 6:PRINT " 4-Ch 48kHz Stereo HDMI PSG! "',
+        '100 COLOUR 133:COLOUR 7:PRINT " MODES  ";:COLOUR 128:COLOUR 2:PRINT " MODE 0..7 & Sixel Graphics! "',
+        '110 COLOUR 131:COLOUR 0:PRINT " SPRITE ";:COLOUR 128:COLOUR 7:PRINT " 16 Aliens + 64x64 Boss IRQ! "',
+        '120 COLOUR 6:PRINT STRING$(36,CHR$(140))',
+        '130 COLOUR 3:PRINT "102 ";:COLOUR 7:PRINT "Binnenland: HIMEM=&7A00 in elke MODE"',
+        '140 COLOUR 3:PRINT "201 ";:COLOUR 2:PRINT " Arcade:     MODE 1 (40x20) & MODE 2"',
+        '150 COLOUR 3:PRINT "701 ";:COLOUR 6:PRINT "Weerbericht: ";:COLOUR 3:PRINT CHR$(191);CHR$(191);" Zonnig 24 C"',
+        '160 COLOUR 132:COLOUR 3:PRINT " 101 Nieuws  201 Sport  701 Weer  888 "',
+        '170 COLOUR 128:COLOUR 7:PLOT 210,160,&8F:PLOT 211,200,&8F',
+    ],
+    "MODES": [
+        '10 MODE 2:*BG ON',
+        '20 COLOUR 129:COLOUR 3:PRINT " MODE 2: 20x20 "',
+        '30 COLOUR 128:COLOUR 6:PRINT "MEGA ARCADE FONT"',
+        '40 GCOL 0,252:CIRCLE 640,512,320:PLOT 210,120,&9F:?&A002=90',
+        '50 MODE 129:COLOUR 132:COLOUR 3:COLOUR 141:PRINT " MODE 1: 40x20 ARCADE "',
+        '60 COLOUR 132:COLOUR 3:COLOUR 141:PRINT " MODE 1: 40x20 ARCADE "',
+        '70 COLOUR 128:COLOUR 2:PRINT "MODE 129 behoudt 3D Graphics eronder!"',
+        '80 PLOT 211,160,&9F:?&A002=90',
+        '90 MODE 131:PRINT "=== MODE 3: 80x41 GROENE FOSFOR TERMINAL + 3D GRAPHICS ==="',
+        '100 COLOUR 3:PRINT "Alle 8 BBC Modes (MODE 0..7) klaar! Actieve MODE = ";?&A02A',
+    ],
 }
 
 README2_TXT = (
     "=== WELKOM OP DRIVE 2 (DEMO DISK) ===\r"
     "Start met CHAIN \"NAAM\":\r"
-    "1. CHIPTUNE  -> 4-Ch HDMI Audio!\r"
-    "2. ALIENWAR  -> Boss+Botsing!\r"
-    "3. VUURWERK  -> Vuurwerk+Geluid\r"
-    "4. MULTITASK -> IRQ + 3D GPU\r"
-    "5. SYNTHBG / KLOK / BENCHMARK"
+    "1. TELETEKST -> MODE 7 NOS Teletekst!\r"
+    "2. MODES     -> MODE 0..7 Showcase!\r"
+    "3. CHIPTUNE  -> 4-Ch HDMI Audio!\r"
+    "4. ALIENWAR / VUURWERK / SYNTHBG"
 )
 
 def send_cmd(s, cmd, wait=0.4):
@@ -150,11 +180,12 @@ def main():
 
     print("=== Overschakelen naar MicroSD Drive 2 (*SD & *DRIVE 2) ===")
     print(send_cmd(s, "*BG OFF", 0.4).strip())
+    print(send_cmd(s, "MODE 0", 0.5).strip())
     print(send_cmd(s, "*SD", 0.5).strip())
     print(send_cmd(s, "*DRIVE 2", 0.6).strip())
     print(send_cmd(s, "*WIPE", 1.2).strip())
 
-    # Upload alle 7 Fullscreen BBC BASIC + HDMI Sound + MiniGPU Demo's naar Drive 2
+    # Upload alle Fullscreen BBC BASIC + HDMI Sound + MODE 0..7 Demo's naar Drive 2
     for name, lines in DEMOS.items():
         print(f"\nUploaden van {name} naar Drive 2...")
         send_cmd(s, "NEW", 0.2)
@@ -176,12 +207,11 @@ def main():
     print("\n=== Catalogus van Drive 2 (*INFO) ===")
     print(send_cmd(s, "*INFO", 0.8).strip())
 
-    # Draai nu live CHIPTUNE, ALIENWAR, VUURWERK en eindig met SYNTHBG!
+    # Draai nu live CHIPTUNE, MODES en eindig op het prachtige MODE 7 TELETEKST scherm!
     for demo, wait_s in [
         ("CHIPTUNE", 4.5),
-        ("ALIENWAR", 3.5),
-        ("VUURWERK", 3.0),
-        ("SYNTHBG", 1.8),
+        ("MODES", 3.5),
+        ("TELETEKST", 2.0),
     ]:
         print(f"\n>>> LIVE UITVOEREN OP DRIVE 2: CHAIN \"{demo}\" <<<")
         out = send_cmd(s, f'CHAIN "{demo}"', wait_s)

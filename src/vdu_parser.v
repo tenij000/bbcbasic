@@ -76,9 +76,12 @@ module vdu_parser (
             if (valid && !draw_start) begin
                 case (state)
                     0: begin
-                        if (din == 8'h19) state <= 1; // VDU 25
-                        if (din == 8'h12) state <= 6; // VDU 18 (GCOL)
-                        if (din == 8'h10) begin // VDU 16 (CLG)
+                        if (din == 8'h19) state <= 1;      // VDU 25 (PLOT, 5 bytes)
+                        else if (din == 8'h12) state <= 6; // VDU 18 (GCOL, 2 bytes)
+                        else if (din == 8'h16) state <= 8; // VDU 22 (MODE, 1 byte)
+                        else if (din == 8'h11) state <= 9; // VDU 17 (COLOUR, 1 byte)
+                        else if (din == 8'h1F) state <= 10;// VDU 31 (TAB, 2 bytes)
+                        else if (din == 8'h10) begin       // VDU 16 (CLG)
                             draw_start <= 1;
                             draw_is_clear <= 1;
                             draw_is_circle <= 0;
@@ -202,6 +205,24 @@ module vdu_parser (
                     // VDU 18 (GCOL)
                     6: begin state <= 7; end // ignore mode (m) for now
                     7: begin current_gcol <= din; state <= 0; end
+                    // VDU 22 (MODE n): Clear graphics screen if n < 128; preserve graphics if n >= 128 (Shadow/Overlay Mode)
+                    8: begin
+                        state <= 0;
+                        current_gcol <= 8'd7;
+                        last_x <= 16'sd0;
+                        last_y <= 16'sd0;
+                        if (!din[7]) begin
+                            draw_start <= 1'b1;
+                            draw_is_clear <= 1'b1;
+                            draw_is_circle <= 1'b0;
+                            draw_color <= 8'd0;
+                        end
+                    end
+                    // VDU 17 (COLOUR c): skip 1 byte in graphics parser
+                    9: begin state <= 0; end
+                    // VDU 31 (TAB x, y): skip 2 bytes in graphics parser
+                    10: begin state <= 11; end
+                    11: begin state <= 0; end
                     
                     default: state <= 0;
                 endcase

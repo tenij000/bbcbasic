@@ -1500,7 +1500,7 @@ endmacro
    RTS
 
 .msg_help1
-   EQUS "=== SBC02 SD-MOS 1.40 + HDMI AUDIO ===", $0D
+   EQUS "=== SBC02 SD-MOS 1.50 + BBC MODES ===", $0D
    EQUS " *CAT / *INFO [NAAM] Catalogus & Grootte", $0D
    EQUS " *DRIVE 0..3         Floppy Drive 0-3", $0D
    EQUS " *SD / *SDRAM        MicroSD / 4MB SDRAM", $0D
@@ -1509,7 +1509,7 @@ endmacro
    EQUS " *COPY/*DELETE/*RENAME/*WIPE Bestanden", $0D
    EQUS " *TYPE <NAAM> / *DUMP [HEX]  Tekst/RAM", $0D
    EQUS " *BG ON / *BG OFF    16 Sprites + SFX!", $0D
-   EQUS " PLOT 210..213,P,V   4-Ch HDMI Sound!", $0D, 0
+   EQUS " MODE 0..7 / PLOT 210..213 Video+Audio!", $0D, 0
 
 .cli_s_cmd
    ; *SDRAM or *SD: check 3rd letter (after 'S','D')
@@ -1897,7 +1897,10 @@ endmacro
    BNE exitx0
 .not83
    CMP #$84
+   BEQ ret_himem
+   CMP #$85
    BNE exit
+.ret_himem
    LDY #$7A                  ; HIMEM = $7A00 (leaves $7A00-$7BFF for FILE_BUF and $7C00-$7DFF for SD_BUF)
 .exitx0
    LDX #$00
@@ -2038,7 +2041,7 @@ ENDIF
 
 .reset_msg
    EQUB $0D
-   EQUS "SBC02 SD-MOS 1.40 / BBC BASIC"
+   EQUS "SBC02 SD-MOS 1.50 / BBC BASIC"
    EQUB $0A, $0D
 IF USE_XON_XOFF = 1
    EQUB $11

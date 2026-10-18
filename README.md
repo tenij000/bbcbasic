@@ -190,7 +190,7 @@ PLOT 213, 20,  &8F               : REM Witte Ruis Explosie op Kanaal 3 (Ruis-fre
 ```
 
 ### 6. ⚡ BBC Micro-stijl 100 Hz Hardware Interrupt Multitasking (`*BG ON`, `TIME` & `USR_BGV`)
-Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped sprite-registers (`$A020-$A029`) ondersteunt **SBC02 SD-MOS 1.30** echte hardware interrupt multitasking:
+Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped sprite-registers (`$A020-$A02A`) ondersteunt **SBC02 SD-MOS 1.50** echte hardware interrupt multitasking:
 * **Echte 100 Hz `TIME` Systeemklok (in centiseconden):**
   ```basic
   TIME = 0
@@ -208,6 +208,31 @@ Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped s
   40 FOR I = 1 TO 5000 : NEXT
   50 PRINT "Achtergrond-ticks: "; ?&70
   60 ?&2F7 = 0                 : REM Schakel eigen achtergrond-routine weer uit
+  ```
+
+### 7. 📺 BBC BASIC `MODE 0..7` & `MODE 7` NOS Teletekst / Ceefax Engine (`VDU 22` & `$A02A`)
+Omdat de 8 MB SDRAM Framebuffer en de BRAM Tekst-Terminal volledig buiten het 6502 RAM leven, blijft **`HIMEM = &7A00` (~29 KB vrij BASIC RAM)** in élke `MODE` behouden en kun je in **alle** modes tegelijk `1280×1024` 256-kleuren graphics + 16 Hardware Sprites tekenen!
+* **Overzicht van `MODE 0` t/m `MODE 7`:**
+  * **`MODE 0`**: `80 × 41` High-Res Workstation Tekst (`16×16` px chars, Witte tekst) + Full Graphics
+  * **`MODE 1`**: `40 × 20` Grote Arcade Tekst (`32×32` px chars, **2× Zoom**, Witte tekst) + Full Graphics
+  * **`MODE 2`**: `20 × 20` Mega Arcade Scoreboard Tekst (`64×32` px chars, **4× Breed Chunky Font**) + Full Graphics
+  * **`MODE 3`**: `80 × 41` 1980s Groene Fosfor Terminal (`COLOUR 2` standaard)
+  * **`MODE 4`**: `40 × 20` 2× Grote Amber/Goud Fosfor Monitor (`COLOUR 13` standaard)
+  * **`MODE 5`**: `20 × 20` 4× Brede Cyber-Cyaan Arcade Modus (`COLOUR 6` standaard)
+  * **`MODE 6`**: `40 × 20` 2× Grote Groene Fosfor Terminal (`COLOUR 2` standaard)
+  * **`MODE 7`**: `40 × 20` **NOS Teletekst / Ceefax Modus** met `2×3` Sixel Blok-Graphics (`CHR$(128..255)`), gekleurde achtergrondbalken (`COLOUR 129..136`) en Dubbele-Hoogte Teletekst-koppen (`COLOUR 141`)!
+  * **`MODE 128..135` (`MODE 128 + n`, Shadow/Overlay Mode)**: Wisselt van tekst-resolutie (`0..7`) **zónder** de 3D Graphics Framebuffer eronder te wissen!
+  * **`?&A02A` (`VID_MODE`)**: Lees de huidige `MODE` (`0..7`) uit of schrijf `?&A02A = 0..7` om live van tekstschaal te wisselen zonder tekst of graphics te wissen!
+* **Teletekst Kleurbalken, Dubbele Hoogte & Sixel Blok-Graphics voorbeeld (`CHAIN "TELETEKST"` op Drive 2):**
+  ```basic
+  MODE 7
+  COLOUR 132 : COLOUR 3
+  COLOUR 141 : PRINT "  === NOS TELETEKST 101 ===   "
+  COLOUR 141 : PRINT "  === NOS TELETEKST 101 ===   "
+  COLOUR 129 : COLOUR 7 : PRINT " NIEUWS ";
+  COLOUR 128 : COLOUR 3 : PRINT " 27MHz 6502 + MODE 0..7! "
+  REM CHR$(128..191) = 64 Aaneengesloten 2x3 Sixel Blokken (CHR$(191) = Vol Blok)
+  REM CHR$(192..255) = 64 Gescheiden 2x3 Teletekst Mozaiek Blokken (CHR$(255) = 6 Tegels)
   ```
 
 ---
