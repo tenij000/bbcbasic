@@ -3,23 +3,21 @@ import time
 
 README_TXT = (
     "=== WELKOM OP DE 6502 + MINIGPU ===\r"
-    "Voorbeelden van SD-MOS 1.20:\r"
+    "Voorbeelden van SD-MOS 1.30:\r"
+    " *BG ON / OFF -> 16 Sprites Multitask!\r"
     " *INFO        -> Toon bestandsgroottes\r"
     " *DRIVE 1     -> Ga naar ASM Floppy D1\r"
     " *RUN CHESS   -> Start 1976 MicroChess\r"
-    " *COPY SDTEST -> Kopieer SD <-> SDRAM\r"
     " *DUMP B000   -> Bekijk ROM in HEX"
 )
 
 COMMANDS_TXT = (
-    "=== VOORBEELDEN BESTANDSBEHEER ===\r"
-    " 1. Sla op & bekijk info:\r"
-    "    SAVE \"MIJN\" / *INFO MIJN\r"
-    " 2. Hernoem & wis een bestand:\r"
-    "    *RENAME MIJN NIEUW\r"
-    "    *DELETE NIEUW\r"
-    " 3. 4MB SDRAM-Disk: *SDRAM / *SD\r"
-    " 4. Lees tekst: *TYPE README.TXT"
+    "=== MULTITASKING & BESTANDEN ===\r"
+    " 1. Multitask: *BG ON / *BG OFF\r"
+    " 2. Klok (100Hz): PRINT TIME\r"
+    " 3. Hernoem/Wis: *RENAME / *DELETE\r"
+    " 4. Kopieer: *COPY SDTEST (SD<->SDRAM)\r"
+    " 5. Lees tekst: *TYPE README.TXT"
 )
 
 def write_text_file_to_sd(s, filename, content, drive=0):

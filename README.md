@@ -48,9 +48,11 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 | **`$7E00 - $7FFF`** | 512 B | **IRQ Buffers** voor UART / PS/2 toetsenbord |
 | **`$A000 - $A001`** | 2 B | **6850 ACIA Emulatie**: Status (`$A000`), Toetsenbord-in / GPU VDU-uit (`$A001`) |
 | **`$A002`** | 1 B | **Hardware Delay Timer**: Schrijf `N` om de CPU `N × 10 ms` te pauzeren via `RDY` |
+| **`$A003`** | 1 B | **100 Hz System Timer (`TIMER_TICKS`)**: Hardware centisecond-klok & IRQ bron voor `TIME` en multitasking |
 | **`$A010 - $A011`** | 2 B | **MicroSD Hardware SPI Controller**: Data (`$A010`), CS & Kloksnelheid (`$A011`) |
 | **`$A012 - $A015`** | 4 B | **4 MB Interne SDRAM-Disk**: Adres Laag (`$A012`), Hoog (`$A013`), Data (`$A014`), Bank 0..63 (`$A015`) |
-| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
+| **`$A020 - $A026`** | 7 B | **Directe Hardware Sprite & Physics Registers**: `SPR_SEL` (`$A020`), `X/Y` (`$A021-$A024`), `ACT` (`$A025`), `SPR_STEP` (`$A026`) |
+| **`$B000 - $BFFF`** | **4 KB** | **Extended SD-MOS 1.30 ROM** (`SD_MOS.asm` / `mos_ext.hex`) |
 | **`$C000 - $FFFF`** | **16 KB** | **Acorn BBC BASIC II ROM + MOS Vectoren** (`Basic2.asm` + `SBC_MOS.asm`) |
 
 ---
@@ -75,7 +77,7 @@ Een complete, zelfstandige **8-bit jaren '80 homecomputer op één FPGA** (Sipee
 
 ---
 
-## 🚀 Overzicht van BBC BASIC & SD-MOS Commando's
+## 🚀 Overzicht van BBC BASIC & SD-MOS 1.30 Commando's
 
 ### 1. Grafische GPU-commando's
 ```basic
@@ -93,7 +95,7 @@ CIRCLE 640, 360, 150             : REM Teken een cirkel op middelpunt (640,360) 
 ```basic
 SAVE "MIJNPROG"                  : REM Sla het huidige BASIC-programma op
 LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
-*HELP                            : REM Toon overzicht van alle ingebouwde SD-MOS 1.20 commando's
+*HELP                            : REM Toon overzicht van alle ingebouwde SD-MOS 1.30 commando's
 *CAT                             : REM Toon de catalogus (inhoudsopgave)
 *INFO                            : REM Toon slotnummer (#00..#0E), naam en exacte grootte in HEX ($XXXX B)
 *INFO EXCEL                      : REM Toon bestandsinformatie voor één specifiek bestand
@@ -103,8 +105,10 @@ LOAD "MIJNPROG"                  : REM Laad een BASIC-programma
 *COPY EXCEL                      : REM Kopieer een bestand rechtstreeks tussen MicroSD en 4 MB SDRAM-Disk!
 *RENAME OUD NIEUW                : REM Hernoem een bestand in de catalogus
 *DELETE MIJNPROG                 : REM Wis één specifiek bestand uit de catalogus (zonder de rest te wissen)
-*TYPE NAAM.DAT                   : REM Toon de tekst-inhoud van een bestand op het scherm
+*TYPE README.TXT                 : REM Toon de tekst-inhoud van een bestand op het scherm
 *DUMP B000                       : REM Toon een 64-byte Hex + ASCII geheugendump vanaf een HEX-adres
+*BG ON                           : REM Start 16 Hardware Sprites op de achtergrond via 100 Hz IRQ Multitasking!
+*BG OFF                          : REM Stop achtergrond-sprites en verberg ze
 *WIPE                            : REM Formatteer de volledige catalogus van de huidige drive
 *RUN EXCEL                       : REM Start VisiCalc / Mini-Excel 6502 (pure 6502 machinetaal op $6000)!
 *RUN MATRIX                      : REM Start de 6502 Radar & Laser demo vanaf SD-kaart
@@ -140,13 +144,34 @@ Schakel naar Drive 1 met `*DRIVE 1` en start direct een van de **10 klassieke 65
 80 PRINT TEKST$, GETAL%
 ```
 
-### 4. Hardware Sprites aansturen (`PLOT 200..203`)
+### 4. Hardware Sprites aansturen (`PLOT 200..203` & Directe Registers `$A020..$A026`)
 ```basic
 PLOT 200, 0, 0                   : REM Selecteer Sprite ID 0 (0 t/m 15)
 PLOT 201, 1, 0                   : REM Zet Sprite 0 AAN (1 = zichtbaar, 0 = verborgen)
 PLOT 202, 640, 360               : REM Zet Sprite 0 op schermpositie X=640, Y=360
 PLOT 203, ADRES, KLEUR           : REM Schrijf pixelkleur naar sprite-geheugen (0..255)
 ```
+
+### 5. ⚡ BBC Micro-stijl 100 Hz Hardware Interrupt Multitasking (`*BG ON`, `TIME` & `USR_BGV`)
+Dankzij de 100 Hz hardware systeemtimer op `$A003` en de directe memory-mapped sprite-registers (`$A020-$A026`) ondersteunt **SBC02 SD-MOS 1.30** echte hardware interrupt multitasking:
+* **Echte 100 Hz `TIME` Systeemklok (in centiseconden):**
+  ```basic
+  TIME = 0
+  FOR I = 1 TO 10000 : NEXT
+  PRINT "Verstreken tijd: "; TIME; " centiseconden"
+  ```
+* **16 Hardware Sprites op de Achtergrond (`*BG ON` / `*BG OFF`):**
+  Typ `*BG ON` om alle 16 Hardware Sprites gelijktijdig met 50/100 Hz over het scherm te laten stuiteren vanuit de 6502 IRQ-handler, terwijl je op de voorgrond gewoon in BBC BASIC typt, `LIST` of `*CAT` uitvoert, of programma's draait!
+  * Snelheid en richting van elke sprite (`0..15`) staan live in 6502 RAM op `$02D0..$02DF` (`bit 7`=X-richting, `bit 6`=Y-richting, `bits 5..3`=dX, `bits 2..0`=dY).
+* **Eigen 6502 Achtergrondtaak koppelen (`USR_BGV` op `$02F6-$02F7`):**
+  ```basic
+  10 ?&70 = 0
+  20 P% = &0900 : [OPT 2 : INC &70 : RTS :]
+  30 ?&2F6 = &00 : ?&2F7 = &09 : REM Start 100 Hz achtergrond-routine op $0900!
+  40 FOR I = 1 TO 5000 : NEXT
+  50 PRINT "Achtergrond-ticks: "; ?&70
+  60 ?&2F7 = 0                 : REM Schakel eigen achtergrond-routine weer uit
+  ```
 
 ---
 

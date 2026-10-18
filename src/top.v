@@ -221,6 +221,36 @@ module top(
 
     wire term_busy;
     wire cpu_rdy = !delay_active && !gpu_busy_sys && !gpu_start_sys && !sd_busy && !term_busy && !rd_busy;
+
+    // --- 100 Hz Hardware System Timer ($A003) for BBC BASIC TIME & Multitasking IRQ ---
+    reg [18:0] sys_timer_cnt = 0;
+    reg [7:0]  timer_ticks   = 0;
+
+    always @(posedge sys_clk) begin
+        if (reset) begin
+            sys_timer_cnt <= 0;
+            timer_ticks   <= 0;
+        end else begin
+            if (sys_timer_cnt == 19'd269_999)
+                sys_timer_cnt <= 0;
+            else
+                sys_timer_cnt <= sys_timer_cnt + 19'd1;
+
+            if (cpu_rdy && !cpu_we && cpu_ab == 16'hA003) begin
+                timer_ticks <= (sys_timer_cnt == 19'd269_999) ? 8'd1 : 8'd0;
+            end else if (sys_timer_cnt == 19'd269_999) begin
+                if (timer_ticks != 8'hFF)
+                    timer_ticks <= timer_ticks + 8'd1;
+            end
+        end
+    end
+
+    // --- Direct Memory-Mapped Hardware Sprite Registers ($A020 - $A026) ---
+    reg [3:0]  spr_sel = 0;
+    reg [7:0]  spr_dir_out = 0;
+    reg [11:0] sprite_x_reg [0:15];
+    reg [11:0] sprite_y_reg [0:15];
+    reg        sprite_active_reg [0:15];
     
     always @(posedge sys_clk) begin
         rd_ack_sync <= {rd_ack_sync[1:0], rd_ack_toggle};
@@ -299,10 +329,26 @@ module top(
                 cpu_di <= {6'b000000, 1'b1, kbd_ready};
             end else if (cpu_ab == 16'hA001) begin
                 cpu_di <= kbd_data;
+            end else if (cpu_ab == 16'hA003) begin
+                cpu_di <= timer_ticks;
             end else if (cpu_ab == 16'hA010) begin
                 cpu_di <= sd_rx_data;
             end else if (cpu_ab == 16'hA014) begin
                 cpu_di <= rd_dout;
+            end else if (cpu_ab == 16'hA020) begin
+                cpu_di <= {4'b0000, spr_sel};
+            end else if (cpu_ab == 16'hA021) begin
+                cpu_di <= sprite_x_reg[spr_sel][7:0];
+            end else if (cpu_ab == 16'hA022) begin
+                cpu_di <= {4'b0000, sprite_x_reg[spr_sel][11:8]};
+            end else if (cpu_ab == 16'hA023) begin
+                cpu_di <= sprite_y_reg[spr_sel][7:0];
+            end else if (cpu_ab == 16'hA024) begin
+                cpu_di <= {4'b0000, sprite_y_reg[spr_sel][11:8]};
+            end else if (cpu_ab == 16'hA025) begin
+                cpu_di <= {7'b0000000, sprite_active_reg[spr_sel]};
+            end else if (cpu_ab == 16'hA026) begin
+                cpu_di <= spr_dir_out;
             end else if (cpu_ab >= 16'hB000 && cpu_ab < 16'hC000) begin
                 cpu_di <= mos_rom[cpu_ab[11:0]]; // B000-BFFF is 4KB Extended MOS ROM
             end else if (cpu_ab >= 16'hC000) begin
@@ -320,7 +366,7 @@ module top(
         .DI(cpu_di),
         .DO(cpu_do),
         .WE(cpu_we),
-        .IRQ(kbd_ready | (acia_ctrl[6:5] == 2'b01)),
+        .IRQ(kbd_ready | (acia_ctrl[6:5] == 2'b01) | (timer_ticks != 8'd0)),
         .NMI(1'b0),
         .RDY(cpu_rdy)
     );
@@ -456,13 +502,16 @@ module top(
     );
     
     // --- Hardware Sprite Rendering (16 Sprites) ---
-    reg [11:0] sprite_x_reg [0:15];
-    reg [11:0] sprite_y_reg [0:15];
-    reg        sprite_active_reg [0:15];
-    
+    wire [11:0] cur_sp_x = sprite_x_reg[spr_sel];
+    wire [11:0] cur_sp_y = sprite_y_reg[spr_sel];
+    wire [11:0] step_dx  = {9'd0, cpu_do[5:3]};
+    wire [11:0] step_dy  = {9'd0, cpu_do[2:0]};
+
     integer i;
     always @(posedge sys_clk) begin
         if (reset) begin
+            spr_sel     <= 0;
+            spr_dir_out <= 0;
             for (i = 0; i < 16; i = i + 1) begin
                 sprite_x_reg[i] <= 0;
                 sprite_y_reg[i] <= 0;
@@ -475,6 +524,55 @@ module top(
             end
             if (sprite_active_we) begin
                 sprite_active_reg[sprite_id] <= sprite_active_out;
+            end
+            if (cpu_rdy && cpu_we) begin
+                case (cpu_ab)
+                    16'hA020: spr_sel <= cpu_do[3:0];
+                    16'hA021: sprite_x_reg[spr_sel][7:0]  <= cpu_do;
+                    16'hA022: sprite_x_reg[spr_sel][11:8] <= cpu_do[3:0];
+                    16'hA023: sprite_y_reg[spr_sel][7:0]  <= cpu_do;
+                    16'hA024: sprite_y_reg[spr_sel][11:8] <= cpu_do[3:0];
+                    16'hA025: sprite_active_reg[spr_sel]  <= cpu_do[0];
+                    16'hA026: begin
+                        spr_dir_out[5:0] <= cpu_do[5:0];
+                        // Step X with 0..624 screen boundary bounce
+                        if (!cpu_do[7]) begin
+                            if (cur_sp_x + step_dx >= 12'd624) begin
+                                sprite_x_reg[spr_sel] <= 12'd624;
+                                spr_dir_out[7]        <= 1'b1;
+                            end else begin
+                                sprite_x_reg[spr_sel] <= cur_sp_x + step_dx;
+                                spr_dir_out[7]        <= 1'b0;
+                            end
+                        end else begin
+                            if (cur_sp_x <= step_dx) begin
+                                sprite_x_reg[spr_sel] <= 12'd0;
+                                spr_dir_out[7]        <= 1'b0;
+                            end else begin
+                                sprite_x_reg[spr_sel] <= cur_sp_x - step_dx;
+                                spr_dir_out[7]        <= 1'b1;
+                            end
+                        end
+                        // Step Y with 0..464 screen boundary bounce
+                        if (!cpu_do[6]) begin
+                            if (cur_sp_y + step_dy >= 12'd464) begin
+                                sprite_y_reg[spr_sel] <= 12'd464;
+                                spr_dir_out[6]        <= 1'b1;
+                            end else begin
+                                sprite_y_reg[spr_sel] <= cur_sp_y + step_dy;
+                                spr_dir_out[6]        <= 1'b0;
+                            end
+                        end else begin
+                            if (cur_sp_y <= step_dy) begin
+                                sprite_y_reg[spr_sel] <= 12'd0;
+                                spr_dir_out[6]        <= 1'b0;
+                            end else begin
+                                sprite_y_reg[spr_sel] <= cur_sp_y - step_dy;
+                                spr_dir_out[6]        <= 1'b1;
+                            end
+                        end
+                    end
+                endcase
             end
         end
     end

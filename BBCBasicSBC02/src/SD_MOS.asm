@@ -33,6 +33,7 @@ BRKV        = $0202
 RX_BUFFER   = $7E00
 TX_BUFFER   = $7F00
 UART        = $A000
+TIMER_TICKS = $A003
 
 SD_DATA      = $A010
 SD_CTRL      = $A011
@@ -41,16 +42,28 @@ RD_ADDR_HI   = $A013
 RD_DATA      = $A014
 RD_ADDR_BANK = $A015
 
+SPR_SEL      = $A020
+SPR_X_LO     = $A021
+SPR_X_HI     = $A022
+SPR_Y_LO     = $A023
+SPR_Y_HI     = $A024
+SPR_ACT      = $A025
+SPR_STEP     = $A026
+
 FILE_BUF    = $7A00     ; 512-byte stream buffer for OPENIN / OPENOUT
 SD_BUF      = $7C00     ; 512-byte directory / sector buffer
 
-;; Open file state ($02E0 - $02F3)
+;; Background Multitasking & Open file state ($02D0 - $02F8)
+bg_dir      = $02D0     ; 16-byte sprite velocity/direction table ($02D0-$02DF)
 f_mode      = $02E0     ; $00=closed, $40=OPENIN, $80=OPENOUT, $C0=OPENUP
 f_idx       = $02E1     ; Current read/write byte index (0..255)
 f_len       = $02E2     ; File byte length (0..255)
 f_sdram     = $02E3     ; $80 = force 4MB SDRAM-Disk, $00 = SD Card with SDRAM fallback
 f_name      = $02E4     ; 16-byte normalized filename for OPENOUT
 f_drive     = $02F4     ; Current virtual floppy drive number (0..3)
+bg_mode     = $02F5     ; $01 = *BG ON (16 hardware sprites multitasking), $00 = *BG OFF
+usr_bgv     = $02F6     ; 2-byte User Background IRQ Vector ($02F6-$02F7, 0=disabled)
+bg_prescale = $02F8     ; 50 Hz prescaler for background sprite physics
 
 ;; Zero-page workspace ($00E0 - $00EF, reserved for MOS)
 sd_ptr      = $00E0     ; 2 bytes ($E0, $E1)
@@ -1480,17 +1493,17 @@ endmacro
    RTS
 
 .msg_help1
-   EQUS "=== SBC02 SD-MOS 1.20 COMMANDO'S ===", $0D
+   EQUS "=== SBC02 SD-MOS 1.30 COMMANDO'S ===", $0D
    EQUS "  *CAT / *INFO [NAAM]  Catalogus & Grootte", $0D
    EQUS "  *DRIVE 0..3          Kies Floppy Drive 0-3", $0D
    EQUS "  *SD / *SDRAM         MicroSD of 4MB SDRAM", $0D
    EQUS "  *RUN / *BLOAD / *BSAVE <NAAM> ($6000 ASM)", $0D, 0
 .msg_help2
    EQUS "  *COPY <NAAM>         Kopieer SD <-> SDRAM", $0D
-   EQUS "  *DELETE <NAAM>       Wis 1 bestand", $0D
-   EQUS "  *RENAME <OUD> <NW>   Hernoem bestand", $0D
+   EQUS "  *DELETE / *RENAME    Wis of hernoem file", $0D
    EQUS "  *TYPE <NAAM>         Toon tekstbestand", $0D
    EQUS "  *DUMP [HEX]          Hex+ASCII dump", $0D
+   EQUS "  *BG ON / *BG OFF     16 Sprites Multitask!", $0D
    EQUS "  *WIPE                Formatteer drive", $0D, 0
 
 .cli_s_cmd
@@ -1511,7 +1524,9 @@ endmacro
 .cli_b_cmd
    INY
    LDA (sd_ptr),Y
-   AND #$DF                  ; Uppercase second letter (BSAVE, BLOAD, BRUN)
+   AND #$DF                  ; Uppercase second letter (BSAVE, BLOAD, BRUN, BG)
+   CMP #'G'
+   BEQ cli_bg
    CMP #'S'
    BEQ cli_bsave
    CMP #'L'
@@ -1531,6 +1546,79 @@ endmacro
    JSR cli_extract_fn
    LDA #$02
    JMP osfile_from_buf
+
+;; *BG ON / *BG OFF (Hardware Interrupt Multitasking voor alle 16 Sprites)
+.cli_bg
+   JSR cli_extract_fn
+   LDA $0600
+   CMP #'0'
+   BEQ cli_bg_off
+   LDA $0601
+   CMP #'F'
+   BEQ cli_bg_off
+   LDX #$0F
+.bg_init_lp
+   STX SPR_SEL
+   TXA
+   ASL A: ASL A: ASL A: ASL A
+   CLC: ADC #$20
+   STA SPR_X_LO
+   LDA #$00
+   ADC #$00
+   STA SPR_X_HI
+   TXA
+   ASL A: ASL A: ASL A: ASL A
+   CLC: ADC #$28
+   STA SPR_Y_LO
+   LDA #$00
+   STA SPR_Y_HI
+   LDA #$01
+   STA SPR_ACT
+   TXA
+   AND #$03
+   CLC: ADC #$02
+   ASL A: ASL A: ASL A
+   STA bg_dir,X
+   TXA
+   EOR #$03
+   AND #$03
+   CLC: ADC #$01
+   ORA bg_dir,X
+   STA bg_dir,X
+   TXA
+   ROR A: ROR A: ROR A
+   AND #$C0
+   ORA bg_dir,X
+   STA bg_dir,X
+   DEX
+   BPL bg_init_lp
+   LDA #$01
+   STA bg_prescale
+   BNE bg_set_mode
+.cli_bg_off
+   LDA #$00
+   LDX #$0F
+.bg_off_lp
+   STX SPR_SEL
+   STA SPR_ACT
+   DEX
+   BPL bg_off_lp
+.bg_set_mode
+   STA bg_mode
+   LDX #$00
+.pr_bg_lp
+   LDA msg_bg,X
+   BEQ pr_bg_done
+   JSR OSASCI
+   INX
+   BNE pr_bg_lp
+.pr_bg_done
+   LDA bg_mode
+   ORA #'0'
+   JSR OSASCI
+   JMP OSNEWL
+.msg_bg
+   EQUS "BG MULTITASK: ", 0
 
 .cli_extract_fn
    ; Skip command word until space, quote, or CR
@@ -1647,24 +1735,27 @@ endmacro
    BNE osword_exit
 
 .osword_writesysclk
+   PHP
+   SEI
    LDY #$03
 .wloop
    LDA (pblock), Y
    STA ZP_TIME,Y
    DEY
    BPL wloop
-   BMI osword_exit
+   PLP
+   JMP osword_exit
 
 .osword_readsysclk
+   PHP
+   SEI
    LDY #$03
 .rloop
    LDA ZP_TIME,Y
    STA (pblock), Y
    DEY
    BPL rloop
-IF USE_NMI_TIMER <> 1
-   DO_INCREMENT_TIME
-ENDIF
+   PLP
 
 .osword_exit
    LDY pblock+1
@@ -1802,24 +1893,52 @@ ENDIF
 }
 
 .nmi_handler
-{
-IF USE_NMI_PRESCALER = 1
-   LSR ZP_PRESCALE
-   BCC tick
    RTI
-.tick
-   DEC ZP_PRESCALE
-ENDIF
-IF USE_NMI_TIMER = 1
-   DO_INCREMENT_TIME
-ENDIF
-   RTI
-}
+
+.call_usr_bgv
+   JMP (usr_bgv)
 
 .irq_handler
 {
    TXA
    PHA
+   LDA TIMER_TICKS
+   BEQ irq_uart_rx
+   CLC
+   ADC ZP_TIME
+   STA ZP_TIME
+   BCC irq_time_nc
+   INC ZP_TIME+1
+   BNE irq_time_nc
+   INC ZP_TIME+2
+   BNE irq_time_nc
+   INC ZP_TIME+3
+.irq_time_nc
+   TYA
+   PHA
+   LDA bg_mode
+   BEQ irq_chk_usr
+   DEC bg_prescale
+   BPL irq_chk_usr
+   LDA #$01
+   STA bg_prescale
+   LDX #$0F
+.irq_bg_loop
+   STX SPR_SEL
+   LDA bg_dir,X
+   STA SPR_STEP
+   LDA SPR_STEP
+   STA bg_dir,X
+   DEX
+   BPL irq_bg_loop
+.irq_chk_usr
+   LDA usr_bgv+1
+   BEQ irq_timer_done
+   JSR call_usr_bgv
+.irq_timer_done
+   PLA
+   TAY
+.irq_uart_rx
    LDA UART
    AND #$01
    BEQ irq_tx
@@ -1902,6 +2021,9 @@ ENDIF
    STX f_mode
    STX f_sdram
    STX f_drive
+   STX bg_mode
+   STX usr_bgv
+   STX usr_bgv+1
    LDY #ZP_END - ZP_START + 1
 .clrloop
    STX ZP_START - 1, Y
